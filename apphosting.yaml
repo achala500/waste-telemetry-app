@@ -1,0 +1,24 @@
+# Settings for Firebase App Hosting
+kind: "AppHostingYaml"
+version: "v1alpha"
+
+runConfig:
+  minInstances: 0
+  maxInstances: 5
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 1024
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: omnitv-live-streaming
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyCFXqJ3YFsRtvLnj3Wle5HvTjm-2EH-seg
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: omnitv-live-streaming.firebaseapp.com
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: omnitv-live-streaming.appspot.com
+  - variable: TELEMETRY_API_KEY
+    value: a7a00b168ea20c8ba6344fe9518bbbdd9bca6edf1a54265e429b0f33ad31e3d8
+    availability:
+      - RUNTIME

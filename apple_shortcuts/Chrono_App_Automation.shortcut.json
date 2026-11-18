@@ -1,0 +1,89 @@
+{
+  "name": "Chrono Automated App Tracker",
+  "description": "Background iOS Personal Automation shortcut for tracking app open & close sessions without user friction.",
+  "version": "2.0.0",
+  "icon": {
+    "glyph": "bolt.horizontal",
+    "color": "emberOrange",
+    "hex": "#FB923C",
+    "backgroundColor": "#08080A"
+  },
+  "config": {
+    "endpoint": "http://localhost:3000/api/telemetry",
+    "apiKey": "a7a00b168ea20c8ba6344fe9518bbbdd9bca6edf1a54265e429b0f33ad31e3d8"
+  },
+  "automationTriggers": [
+    {
+      "trigger": "When 'Instagram' is opened",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_open', 'label': 'Instagram', 'category': 'wasted' }"
+    },
+    {
+      "trigger": "When 'Instagram' is closed",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_close', 'label': 'Instagram', 'category': 'wasted' }"
+    },
+    {
+      "trigger": "When 'TikTok' is opened",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_open', 'label': 'TikTok', 'category': 'wasted' }"
+    },
+    {
+      "trigger": "When 'TikTok' is closed",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_close', 'label': 'TikTok', 'category': 'wasted' }"
+    },
+    {
+      "trigger": "When 'YouTube' is opened",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_open', 'label': 'YouTube', 'category': 'wasted' }"
+    },
+    {
+      "trigger": "When 'YouTube' is closed",
+      "action": "Run Chrono Automated App Tracker with Input: { 'event': 'app_close', 'label': 'YouTube', 'category': 'wasted' }"
+    }
+  ],
+  "workflow": {
+    "actions": [
+      {
+        "id": "action_1_extract_shortcut_input",
+        "actionName": "Get Dictionary Value",
+        "actionIdentifier": "is.workflow.actions.getvalueforkey",
+        "description": "Extract event parameters passed from iOS Automation trigger",
+        "parameters": {
+          "event": "Shortcut Input.event",
+          "label": "Shortcut Input.label",
+          "category": "Shortcut Input.category"
+        }
+      },
+      {
+        "id": "action_2_get_current_date",
+        "actionName": "Date (Current Date)",
+        "actionIdentifier": "is.workflow.actions.date"
+      },
+      {
+        "id": "action_3_format_date",
+        "actionName": "Format Date",
+        "dateFormatStyle": "ISO 8601"
+      },
+      {
+        "id": "action_4_build_payload",
+        "actionName": "Dictionary",
+        "parameters": {
+          "event": "Extracted.event",
+          "label": "Extracted.label",
+          "category": "Extracted.category",
+          "timestamp": "Formatted Date"
+        }
+      },
+      {
+        "id": "action_5_post_telemetry",
+        "actionName": "Get Contents of URL",
+        "parameters": {
+          "url": "http://localhost:3000/api/telemetry",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "x-api-key": "a7a00b168ea20c8ba6344fe9518bbbdd9bca6edf1a54265e429b0f33ad31e3d8"
+          },
+          "requestBody": "Dictionary"
+        }
+      }
+    ]
+  }
+}

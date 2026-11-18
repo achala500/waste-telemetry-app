@@ -1,0 +1,201 @@
+{
+  "name": "Chrono Log Event",
+  "description": "High-velocity telemetry logger for Chrono Time Tracking Engine. Supports manual logging, automated app tracking, and Siri voice triggers.",
+  "version": "2.0.0",
+  "clientVersion": "1200",
+  "icon": {
+    "glyph": "timer",
+    "color": "neonLime",
+    "hex": "#A3E635",
+    "backgroundColor": "#08080A"
+  },
+  "config": {
+    "defaultEndpoint": "http://localhost:3000/api/telemetry",
+    "apiKey": "a7a00b168ea20c8ba6344fe9518bbbdd9bca6edf1a54265e429b0f33ad31e3d8"
+  },
+  "schema": {
+    "type": "object",
+    "required": ["event", "label", "category", "durationMinutes"],
+    "properties": {
+      "event": {
+        "type": "string",
+        "enum": ["manual", "app_open", "app_close", "focus_start", "focus_end"],
+        "description": "Event trigger type"
+      },
+      "label": {
+        "type": "string",
+        "description": "App or activity name (e.g. 'Instagram Reels', 'Deep Work - Coding', 'YouTube')"
+      },
+      "category": {
+        "type": "string",
+        "enum": ["focus", "wasted", "routine", "neutral"],
+        "description": "Telemetry classification"
+      },
+      "durationMinutes": {
+        "type": "number",
+        "description": "Duration in minutes"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 timestamp"
+      }
+    }
+  },
+  "workflow": {
+    "minimumClientVersion": "900",
+    "actions": [
+      {
+        "id": "action_1_config_dictionary",
+        "actionName": "Dictionary",
+        "actionIdentifier": "is.workflow.actions.dictionary",
+        "description": "Define Chrono Server endpoint and secret API key",
+        "parameters": {
+          "endpoint": "http://localhost:3000/api/telemetry",
+          "apiKey": "a7a00b168ea20c8ba6344fe9518bbbdd9bca6edf1a54265e429b0f33ad31e3d8"
+        },
+        "outputVariable": "ChronoConfig"
+      },
+      {
+        "id": "action_2_check_input",
+        "actionName": "If (Check Shortcut Input)",
+        "actionIdentifier": "is.workflow.actions.conditional",
+        "description": "Determine if launched with Siri voice text / share sheet input or interactive prompt",
+        "condition": "Shortcut Input has any value",
+        "then": {
+          "actionName": "Set Variable",
+          "variableName": "RawInput",
+          "value": "Shortcut Input"
+        },
+        "otherwise": {
+          "actionName": "Ask for Input",
+          "actionIdentifier": "is.workflow.actions.ask",
+          "inputPrompt": "What activity or app are you logging?",
+          "inputType": "Text",
+          "defaultAnswer": "Instagram Reels",
+          "outputVariable": "RawInput"
+        }
+      },
+      {
+        "id": "action_3_parse_category",
+        "actionName": "Choose from Menu / Auto-Detect Category",
+        "actionIdentifier": "is.workflow.actions.choosefrommenu",
+        "prompt": "Select Category",
+        "items": [
+          {
+            "label": "Wasted Time (Distraction)",
+            "categoryValue": "wasted",
+            "defaultDuration": 30
+          },
+          {
+            "label": "Deep Focus",
+            "categoryValue": "focus",
+            "defaultDuration": 45
+          },
+          {
+            "label": "Routine / Necessary",
+            "categoryValue": "routine",
+            "defaultDuration": 15
+          }
+        ],
+        "outputVariable": "SelectedCategory"
+      },
+      {
+        "id": "action_4_ask_duration",
+        "actionName": "Ask for Input (Duration in Minutes)",
+        "actionIdentifier": "is.workflow.actions.ask",
+        "inputPrompt": "Duration (minutes):",
+        "inputType": "Number",
+        "defaultAnswer": 25,
+        "outputVariable": "DurationNumber"
+      },
+      {
+        "id": "action_5_get_current_date",
+        "actionName": "Date (Current Date)",
+        "actionIdentifier": "is.workflow.actions.date",
+        "dateSource": "Current Date",
+        "outputVariable": "CurrentTimestamp"
+      },
+      {
+        "id": "action_6_format_date_iso",
+        "actionName": "Format Date",
+        "actionIdentifier": "is.workflow.actions.format.date",
+        "dateFormatStyle": "ISO 8601",
+        "includeISO8601Time": true,
+        "input": "CurrentTimestamp",
+        "outputVariable": "FormattedIsoDate"
+      },
+      {
+        "id": "action_7_build_request_payload",
+        "actionName": "Dictionary (Build Telemetry JSON)",
+        "actionIdentifier": "is.workflow.actions.dictionary",
+        "parameters": {
+          "event": "manual",
+          "label": "RawInput",
+          "category": "SelectedCategory",
+          "durationMinutes": "DurationNumber",
+          "timestamp": "FormattedIsoDate"
+        },
+        "outputVariable": "TelemetryPayload"
+      },
+      {
+        "id": "action_8_http_post_telemetry",
+        "actionName": "Get Contents of URL",
+        "actionIdentifier": "is.workflow.actions.downloadurl",
+        "parameters": {
+          "url": "ChronoConfig.endpoint",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json",
+            "x-api-key": "ChronoConfig.apiKey"
+          },
+          "requestBodyType": "JSON",
+          "jsonBody": "TelemetryPayload"
+        },
+        "outputVariable": "ApiResponse"
+      },
+      {
+        "id": "action_9_haptic_feedback",
+        "actionName": "Vibrate Device / Play Haptics",
+        "actionIdentifier": "is.workflow.actions.vibrate",
+        "hapticPattern": "Success"
+      },
+      {
+        "id": "action_10_notify_success",
+        "actionName": "Show Notification",
+        "actionIdentifier": "is.workflow.actions.notification",
+        "parameters": {
+          "title": "Chrono Telemetry Logged",
+          "body": "Logged [RawInput] ([DurationNumber]m - [SelectedCategory]) successfully.",
+          "playSound": true
+        }
+      }
+    ]
+  },
+  "siriPhrases": [
+    {
+      "trigger": "Hey Siri, log focus",
+      "mappedCategory": "focus",
+      "defaultLabel": "Deep Focus",
+      "defaultDuration": 45
+    },
+    {
+      "trigger": "Hey Siri, logged 30m reels",
+      "mappedCategory": "wasted",
+      "defaultLabel": "Instagram Reels",
+      "defaultDuration": 30
+    },
+    {
+      "trigger": "Hey Siri, log distraction",
+      "mappedCategory": "wasted",
+      "defaultLabel": "Social Media",
+      "defaultDuration": 20
+    },
+    {
+      "trigger": "Hey Siri, log deep work",
+      "mappedCategory": "focus",
+      "defaultLabel": "Coding & Architecture",
+      "defaultDuration": 60
+    }
+  ]
+}
