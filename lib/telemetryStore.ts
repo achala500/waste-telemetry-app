@@ -23,7 +23,8 @@ import {
   HeatmapCell,
   AiInsight,
   BlockCategory,
-  UserProfile
+  UserProfile,
+  SubjectTag
 } from './types';
 import {
   appendBlockToSheets,
