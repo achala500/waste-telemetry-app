@@ -537,10 +537,12 @@ class TelemetryStoreManager {
       lower.includes('walk') ||
       lower.includes('gym') ||
       lower.includes('shower') ||
-      lower.includes('errand')
+      lower.includes('errand') ||
+      lower.includes('break') ||
+      lower.includes('rest')
     ) {
       category = 'routine';
-      tag = 'Personal';
+      tag = lower.includes('break') || lower.includes('rest') ? 'Break' : 'Personal';
     } else {
       // Focus Subject Heuristics: Physics takes priority over generic Revision
       if (lower.includes('physics')) {

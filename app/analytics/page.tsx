@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { NavigationRail } from '@/components/NavigationRail';
 import { TopCommandBar } from '@/components/TopCommandBar';
 import { HeatmapView } from '@/components/HeatmapView';
+import { StudyRoiCalculator } from '@/components/StudyRoiCalculator';
 import { QuickLogModal } from '@/components/QuickLogModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import { AuthModal } from '@/components/AuthModal';
@@ -46,6 +47,7 @@ export default function AnalyticsPage() {
         />
 
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-8 py-6 space-y-6">
+          <StudyRoiCalculator />
           <HeatmapView
             heatmapData={heatmapData}
             weeklyData={weeklyData}

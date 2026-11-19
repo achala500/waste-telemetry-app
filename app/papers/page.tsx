@@ -106,13 +106,16 @@ export default function PastPapersPage() {
     currentUserEmail &&
     (ADMIN_EMAILS.includes(currentUserEmail) ||
       currentUserEmail === envAdminEmail ||
-      currentUserEmail.startsWith('achala'))
+      currentUserEmail.startsWith('achala') ||
+      currentUserEmail.includes('achala500'))
   );
 
   const handleDeletePaper = async (paperId: string) => {
-    if (typeof window !== 'undefined' && window.confirm('Are you sure you want to delete this paper from the library?')) {
+    if (typeof window !== 'undefined' && window.confirm('Permanently delete this paper from the library?')) {
+      setPapers((prev) => prev.filter((p) => p.id !== paperId));
       await deleteApprovedPaper(paperId);
-      await loadData();
+      const paperList = await getApprovedPastPapers();
+      setPapers(paperList);
     }
   };
 
@@ -431,7 +434,18 @@ export default function PastPapersPage() {
                           <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#A3E635]/15 text-[#A3E635] border border-[#A3E635]/25">
                             {paper.subject}
                           </span>
-                          <span className="text-xs text-zinc-500 font-semibold tabular-nums">{paper.year}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-zinc-500 font-semibold tabular-nums">{paper.year}</span>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeletePaper(paper.id)}
+                                className="p-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 transition-all shadow-sm active:scale-95"
+                                title="Delete Paper (Admin)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <h3 className="text-sm font-bold text-white leading-snug group-hover:text-[#A3E635] transition-colors">
@@ -473,11 +487,11 @@ export default function PastPapersPage() {
                         {isAdmin && (
                           <button
                             onClick={() => handleDeletePaper(paper.id)}
-                            className="py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
-                            title="Delete Paper (Admin)"
+                            className="py-2 px-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white border border-rose-500/40 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                            title="Delete Paper (Admin Direct Delete)"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Delete</span>
+                            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Delete</span>
                           </button>
                         )}
                       </div>

@@ -12,8 +12,11 @@ import {
   LogOut,
   Bell,
   AlertCircle,
-  Timer as TimerIcon
+  Timer as TimerIcon,
+  Headphones,
+  Zap
 } from 'lucide-react';
+import { FocusAmbientSound } from './FocusAmbientSound';
 import { signInWithGoogle, logOutUser, auth } from '@/lib/firebaseAuth';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { TimerCountdownMode, BlockCategory, SubjectTag } from '@/lib/types';
@@ -54,6 +57,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   const [quickInput, setQuickInput] = useState('');
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
+  const [showAmbientSound, setShowAmbientSound] = useState(false);
 
   // Timer mode & countdown states
   const [timerMode, setTimerMode] = useState<TimerCountdownMode>('stopwatch');
@@ -323,6 +327,20 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
             </button>
           </div>
 
+          {/* Focus Ambient Audio Synthesizer Button */}
+          <button
+            onClick={() => setShowAmbientSound(!showAmbientSound)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl border text-xs font-semibold transition-all active:scale-95 whitespace-nowrap shrink-0 ${
+              showAmbientSound
+                ? 'bg-[#A3E635]/20 border-[#A3E635] text-[#A3E635] shadow-[0_0_12px_rgba(163,230,53,0.25)]'
+                : 'bg-[#141416] border-white/10 hover:border-white/20 text-zinc-300 hover:text-white'
+            }`}
+            title="Focus Ambient Synthesizer (Rain, 10Hz Alpha Binaural, Brown Noise, Lo-Fi)"
+          >
+            <Headphones className="w-3.5 h-3.5 text-[#A3E635]" />
+            <span className="hidden sm:inline">Ambient Audio</span>
+          </button>
+
           {/* + Log Session Button */}
           <button
             onClick={onOpenLogModal}
@@ -399,6 +417,41 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
         </div>
       </div>
 
+      {/* Quick Study Log Pills Strip */}
+      <div className="max-w-7xl mx-auto flex items-center gap-1.5 pt-2 pb-0.5 overflow-x-auto no-scrollbar">
+        <span className="text-[10px] uppercase font-mono font-bold text-zinc-500 tracking-wider flex items-center gap-1 shrink-0">
+          <Zap className="w-3 h-3 text-[#A3E635]" /> Quick Log:
+        </span>
+        <button
+          onClick={() => onQuickLog('50m Combined Maths')}
+          className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#141416] border border-white/10 text-zinc-300 hover:border-[#A3E635]/60 hover:text-[#A3E635] hover:bg-[#A3E635]/5 transition-all active:scale-95 shrink-0"
+          title="Instantly log +50m Maths focus block"
+        >
+          +50m Maths
+        </button>
+        <button
+          onClick={() => onQuickLog('50m Physics')}
+          className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#141416] border border-white/10 text-zinc-300 hover:border-sky-400/60 hover:text-sky-400 hover:bg-sky-400/5 transition-all active:scale-95 shrink-0"
+          title="Instantly log +50m Physics focus block"
+        >
+          +50m Physics
+        </button>
+        <button
+          onClick={() => onQuickLog('30m Past Paper')}
+          className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#141416] border border-white/10 text-zinc-300 hover:border-amber-400/60 hover:text-amber-400 hover:bg-amber-400/5 transition-all active:scale-95 shrink-0"
+          title="Instantly log +30m Past Paper focus block"
+        >
+          +30m Past Paper
+        </button>
+        <button
+          onClick={() => onQuickLog('15m Break')}
+          className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#141416] border border-white/10 text-zinc-300 hover:border-purple-400/60 hover:text-purple-300 hover:bg-purple-400/5 transition-all active:scale-95 shrink-0"
+          title="Instantly log +15m Break block"
+        >
+          +15m Break
+        </button>
+      </div>
+
       {/* Early Stop Distraction Check-in Modal */}
       {showDistractionPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
@@ -454,6 +507,13 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Floating Focus Ambient Sound Synthesizer Capsule */}
+      <FocusAmbientSound
+        isOpen={showAmbientSound}
+        floating={true}
+        onClose={() => setShowAmbientSound(false)}
+      />
     </header>
   );
 };

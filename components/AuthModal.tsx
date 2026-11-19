@@ -6,9 +6,11 @@ import {
   signInWithGoogle,
   signInWithEmail,
   signUpWithEmail,
-  signOutUser
+  signOutUser,
+  signInAsOwner
 } from '../lib/firebaseAuth';
 import { UserProfile } from '../lib/types';
+import { syncUserProfileToFirestore } from '../lib/firestoreSync';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -142,19 +144,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const handleStudentSignIn = () => {
-    const studentUser: UserProfile = {
-      userId: 'usr_student_' + Date.now(),
-      email: 'achala500@gmail.com',
-      displayName: 'Achala',
-      dailyGoalHours: 5,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
-    };
-    telemetryStore.setUser(studentUser);
-    setSuccessMsg('Signed in as Achala');
-    setTimeout(() => onClose(), 600);
+  const handleOwnerSignIn = async () => {
+    setIsLoading(true);
+    setErrorMsg(null);
+    try {
+      const owner = await signInAsOwner();
+      setSuccessMsg(`Signed in as ${owner.displayName}`);
+      setTimeout(() => onClose(), 600);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setErrorMsg(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleStudentSignIn = handleOwnerSignIn;
 
   return (
     <div
@@ -213,28 +218,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             {errorMsg.includes('configuration-not-found') && (
               <div className="pt-2 border-t border-rose-500/20 space-y-2">
                 <p className="text-[11px] text-zinc-300">
-                  Firebase Authentication is pending sign-in method setup in Firebase Console. Continue in Local Student mode:
+                  Firebase Authentication service configuration in progress. Continue with instant direct Firestore sync:
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const localUser: UserProfile = {
-                      userId: 'usr_local_' + Date.now(),
-                      email: (email.trim() || 'achala500@gmail.com'),
-                      displayName: (displayName.trim() || (email ? email.split('@')[0] : 'Achala')),
-                      dailyGoalHours: dailyGoalHours || 5,
-                      createdAt: new Date().toISOString(),
-                      lastLoginAt: new Date().toISOString()
-                    };
-                    telemetryStore.setUser(localUser);
-                    setSuccessMsg(`Signed in as ${localUser.displayName}!`);
-                    setErrorMsg(null);
-                    setTimeout(() => onClose(), 600);
-                  }}
-                  className="w-full py-2 px-3 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md"
-                >
-                  Continue as {email.trim() || 'Achala'} (Local Mode)
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={handleOwnerSignIn}
+                    className="flex-1 py-2 px-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5"
+                  >
+                    <span>⚡ Sign In as Achala (Owner)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const isOwner = email.toLowerCase().includes('achala') || !email;
+                      const localUser: UserProfile = {
+                        userId: isOwner ? 'usr_achala_owner' : 'usr_local_' + Date.now(),
+                        email: (email.trim() || 'achala500@gmail.com'),
+                        displayName: (displayName.trim() || (isOwner ? 'Achala (Owner)' : email.split('@')[0])),
+                        dailyGoalHours: dailyGoalHours || 5,
+                        createdAt: new Date().toISOString(),
+                        lastLoginAt: new Date().toISOString()
+                      };
+                      telemetryStore.setUser(localUser);
+                      await syncUserProfileToFirestore(localUser).catch(() => {});
+                      setSuccessMsg(`Signed in as ${localUser.displayName}!`);
+                      setErrorMsg(null);
+                      setTimeout(() => onClose(), 600);
+                    }}
+                    className="flex-1 py-2 px-3 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md"
+                  >
+                    <span>Continue as {email.trim() || 'Achala'}</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -445,6 +461,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 />
               </svg>
               <span>Continue with Google</span>
+            </button>
+
+            {/* Dedicated Owner Instant Sign In Button */}
+            <button
+              type="button"
+              onClick={handleOwnerSignIn}
+              disabled={isLoading}
+              className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold text-xs transition-all shadow-md flex items-center justify-center gap-2 active:scale-98"
+            >
+              <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              <span>Sign In as Achala (Owner)</span>
             </button>
 
             {/* Obsidian Divider */}

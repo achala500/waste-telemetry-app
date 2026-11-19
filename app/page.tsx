@@ -8,6 +8,7 @@ import { KpiBentoCards } from '@/components/KpiBentoCards';
 import { Timeline24Hour } from '@/components/Timeline24Hour';
 import { WeeklyOverviewSplit } from '@/components/WeeklyOverviewSplit';
 import { HeatmapView } from '@/components/HeatmapView';
+import { StudyRoiCalculator } from '@/components/StudyRoiCalculator';
 import { LeaderboardView } from '@/components/LeaderboardView';
 import { LogLedgerView } from '@/components/LogLedgerView';
 import { QuickLogModal } from '@/components/QuickLogModal';
@@ -162,6 +163,7 @@ export default function ChronoApp() {
 
           {activeView === 'analytics' && (
             <div className="space-y-6">
+              <StudyRoiCalculator />
               <HeatmapView
                 heatmapData={heatmapData}
                 weeklyData={weeklyData}

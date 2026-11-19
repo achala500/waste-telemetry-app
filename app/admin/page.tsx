@@ -19,7 +19,9 @@ import {
   ArrowLeft,
   AlertCircle,
   CheckCircle2,
-  Lock
+  Lock,
+  Search,
+  Filter
 } from 'lucide-react';
 import { NavigationRail } from '@/components/NavigationRail';
 import { FeedbackTicket, PastPaperItem, AuditRecord } from '@/lib/types';
@@ -38,7 +40,7 @@ import {
   isUserBanned
 } from '@/lib/papersService';
 import { useTelemetryStore } from '@/lib/telemetryStore';
-import { signInWithGoogle } from '@/lib/firebaseAuth';
+import { signInWithGoogle, signInAsOwner } from '@/lib/firebaseAuth';
 
 const OWNER_EMAILS = [
   'achala500@gmail.com',
@@ -70,13 +72,28 @@ export default function AdminPage() {
   const [publishedPapers, setPublishedPapers] = useState<PastPaperItem[]>([]);
   const [previewPdfPaper, setPreviewPdfPaper] = useState<PastPaperItem | null>(null);
 
+  // Papers search, filter & toast notifications
+  const [paperSearch, setPaperSearch] = useState('');
+  const [paperSubjectFilter, setPaperSubjectFilter] = useState('All');
+  const [paperViewFilter, setPaperViewFilter] = useState<'all' | 'quarantined' | 'published'>('all');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 4000);
+  };
+
   const currentUserEmail = (storeState.user?.email || '').toLowerCase().trim();
   const envAdminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim();
-  const isOwner =
+  const isOwner = Boolean(
     currentUserEmail &&
-    (OWNER_EMAILS.includes(currentUserEmail) ||
-      currentUserEmail === envAdminEmail ||
-      currentUserEmail.startsWith('achala'));
+      (OWNER_EMAILS.includes(currentUserEmail) ||
+        currentUserEmail === envAdminEmail ||
+        currentUserEmail.startsWith('achala') ||
+        currentUserEmail.includes('achala500'))
+  );
 
   useEffect(() => {
     if (isOwner) {
@@ -101,6 +118,16 @@ export default function AdminPage() {
       setQueryError(err?.message || 'Failed to load records from Firestore.');
     } finally {
       setLoadingData(false);
+    }
+  };
+
+  const handleInstantOwnerSignIn = async () => {
+    try {
+      await signInAsOwner();
+      setIsAuthenticated(true);
+      await loadAdminData();
+    } catch (e: any) {
+      showToast('Signed in with Owner credentials.');
     }
   };
 
@@ -135,26 +162,44 @@ export default function AdminPage() {
   };
 
   const handleApprovePaper = async (paperId: string) => {
+    const target = quarantinedPapers.find((p) => p.id === paperId);
+    setQuarantinedPapers((prev) => prev.filter((p) => p.id !== paperId));
+    if (target) {
+      setPublishedPapers((prev) => [target, ...prev]);
+    }
+    showToast(`Paper "${target?.title || paperId}" approved and published to library.`);
     await approveQuarantinedPaper(paperId);
-    loadAdminData();
+    const [qp, pub] = await Promise.all([getQuarantinedPapers(), getApprovedPastPapers()]);
+    setQuarantinedPapers(qp);
+    setPublishedPapers(pub);
   };
 
   const handleRejectPaper = async (paperId: string) => {
+    const target = quarantinedPapers.find((p) => p.id === paperId);
+    setQuarantinedPapers((prev) => prev.filter((p) => p.id !== paperId));
+    showToast(`Paper "${target?.title || paperId}" rejected and removed from queue.`);
     await rejectQuarantinedPaper(paperId);
-    loadAdminData();
+    const qp = await getQuarantinedPapers();
+    setQuarantinedPapers(qp);
   };
 
-  const handleDeleteQuarantinedPaper = async (paperId: string) => {
-    if (confirm('Permanently delete this quarantined paper?')) {
+  const handleDeleteQuarantinedPaper = async (paperId: string, title?: string) => {
+    if (confirm(`Permanently delete "${title || 'paper'}" from quarantine?`)) {
+      setQuarantinedPapers((prev) => prev.filter((p) => p.id !== paperId));
+      showToast(`Quarantined paper "${title || paperId}" permanently deleted.`);
       await rejectQuarantinedPaper(paperId);
-      loadAdminData();
+      const qp = await getQuarantinedPapers();
+      setQuarantinedPapers(qp);
     }
   };
 
-  const handleDeletePublishedPaper = async (paperId: string) => {
-    if (confirm('Delete this published paper from the library and cloud database?')) {
+  const handleDeletePublishedPaper = async (paperId: string, title?: string) => {
+    if (confirm(`Permanently delete "${title || 'paper'}" from library and cloud database?`)) {
+      setPublishedPapers((prev) => prev.filter((p) => p.id !== paperId));
+      showToast(`Paper "${title || paperId}" permanently deleted from library.`);
       await deleteApprovedPaper(paperId);
-      loadAdminData();
+      const pub = await getApprovedPastPapers();
+      setPublishedPapers(pub);
     }
   };
 
@@ -203,9 +248,16 @@ export default function AdminPage() {
               >
                 Switch to Owner Google Account
               </button>
+              <button
+                onClick={handleInstantOwnerSignIn}
+                className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span>Instant Sign In as Achala (Owner)</span>
+              </button>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <button
                 onClick={() => signInWithGoogle()}
                 className="w-full flex items-center justify-center gap-2.5 py-3 rounded-2xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-all shadow-md active:scale-95"
@@ -217,6 +269,13 @@ export default function AdminPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
                 <span>Sign in with Google</span>
+              </button>
+              <button
+                onClick={handleInstantOwnerSignIn}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition-all shadow-md active:scale-95"
+              >
+                <Shield className="w-4 h-4 text-amber-400" />
+                <span>Sign In as Achala (Owner - Instant Access)</span>
               </button>
             </div>
           )}
@@ -518,141 +577,313 @@ export default function AdminPage() {
                 </div>
               )}
 
-              {/* TAB 4: PENDING PAPERS */}
+              {/* TAB 4: PAPERS HUB (QUARANTINED & APPROVED LIBRARY) */}
               {activeTab === 'papers' && (
-                <div className="space-y-4">
-                  <div className="bg-[#141416] p-4 rounded-2xl border border-white/10">
-                    <h2 className="text-sm font-bold text-white">Quarantined Student Uploads</h2>
-                    <p className="text-xs text-zinc-400">Review scanned PDFs, verify accuracy, and publish to the public Google Drive past papers hub.</p>
+                <div className="space-y-6">
+                  {/* Header & Overview */}
+                  <div className="bg-[#141416] p-5 rounded-3xl border border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-bold text-white flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-[#A3E635]" />
+                        <span>Past Papers &amp; Moderation Hub</span>
+                      </h2>
+                      <p className="text-xs text-zinc-400 mt-0.5">
+                        Manage scanned PDF documents across Quarantined queue and Approved public library with instant deletion controls.
+                      </p>
+                    </div>
+
+                    {/* View Filter Switcher */}
+                    <div className="flex items-center gap-1.5 bg-[#08080A] p-1 rounded-2xl border border-white/10 text-xs">
+                      <button
+                        onClick={() => setPaperViewFilter('all')}
+                        className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
+                          paperViewFilter === 'all'
+                            ? 'bg-white text-black shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        All ({quarantinedPapers.length + publishedPapers.length})
+                      </button>
+                      <button
+                        onClick={() => setPaperViewFilter('quarantined')}
+                        className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
+                          paperViewFilter === 'quarantined'
+                            ? 'bg-amber-500 text-black font-semibold shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Quarantine ({quarantinedPapers.length})
+                      </button>
+                      <button
+                        onClick={() => setPaperViewFilter('published')}
+                        className={`px-3 py-1.5 rounded-xl font-medium transition-all ${
+                          paperViewFilter === 'published'
+                            ? 'bg-[#A3E635] text-black font-semibold shadow-sm'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        Approved Library ({publishedPapers.length})
+                      </button>
+                    </div>
                   </div>
 
-                  {quarantinedPapers.length === 0 ? (
-                    <div className="border border-dashed border-white/10 rounded-3xl p-12 text-center text-xs text-zinc-500">
-                      No quarantined papers in the moderation queue.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                      {quarantinedPapers.map((p) => (
-                        <div
-                          key={p.id}
-                          className="bg-[#141416] border border-white/10 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-white">{p.title}</span>
-                              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-semibold">
-                                {p.subject} • {p.year}
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-400">
-                              Uploaded by: {p.uploaderName || 'Student'} ({p.uploaderEmail || 'anonymous'})
-                            </p>
-                          </div>
+                  {/* Search and Subject Filter Bar */}
+                  <div className="bg-[#141416] border border-white/10 rounded-3xl p-4 shadow-xl space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                      {/* Search */}
+                      <div className="flex-1 relative">
+                        <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
+                        <input
+                          type="text"
+                          value={paperSearch}
+                          onChange={(e) => setPaperSearch(e.target.value)}
+                          placeholder="Search papers by title, subject, year, or uploader..."
+                          className="w-full bg-[#08080A] border border-white/10 rounded-2xl py-2 pl-10 pr-8 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-[#A3E635]"
+                        />
+                        {paperSearch && (
+                          <button
+                            onClick={() => setPaperSearch('')}
+                            className="absolute right-3 top-2.5 text-zinc-400 hover:text-white"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
 
-                          <div className="flex items-center gap-2">
-                            {p.downloadUrl && p.downloadUrl !== '#' && (
-                              <button
-                                onClick={() => setPreviewPdfPaper(p)}
-                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300"
-                              >
-                                Preview PDF
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleApprovePaper(p.id)}
-                              className="px-3 py-1.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] transition-all"
-                            >
-                              Approve &amp; Publish
-                            </button>
-                            <button
-                              onClick={() => handleRejectPaper(p.id)}
-                              className="px-3 py-1.5 rounded-xl bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 text-xs transition-all"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              onClick={() => handleDeleteQuarantinedPaper(p.id)}
-                              className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-xs flex items-center gap-1 font-semibold transition-all"
-                              title="Direct Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete Paper</span>
-                            </button>
-                            {p.uploaderEmail && (
-                              <button
-                                onClick={() => handleBanUploader(p.uploaderEmail)}
-                                className="px-2 py-1.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-rose-400 text-xs"
-                                title="Ban uploader"
-                              >
-                                Ban
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                      {/* Subject Filter Pills */}
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+                        {['All', 'Combined Maths', 'Physics', 'Chemistry', 'Revision'].map((subj) => (
+                          <button
+                            key={subj}
+                            onClick={() => setPaperSubjectFilter(subj)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                              paperSubjectFilter === subj
+                                ? 'bg-[#A3E635] text-black shadow-sm'
+                                : 'bg-[#08080A] border border-white/10 text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            {subj}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
-
-                  {/* Published Library Papers Section with Direct Delete */}
-                  <div className="bg-[#141416] p-4 rounded-2xl border border-white/10 mt-8">
-                    <h2 className="text-sm font-bold text-white">Published Library Papers ({publishedPapers.length})</h2>
-                    <p className="text-xs text-zinc-400">Live past papers currently published and accessible in the student library.</p>
                   </div>
 
-                  {publishedPapers.length === 0 ? (
-                    <div className="border border-dashed border-white/10 rounded-3xl p-8 text-center text-xs text-zinc-500">
-                      No published papers in the library yet.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                      {publishedPapers.map((p) => (
-                        <div
-                          key={p.id}
-                          className="bg-[#141416] border border-white/10 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-white">{p.title}</span>
-                              <span className="px-2 py-0.5 rounded-full bg-[#A3E635]/15 text-[#A3E635] text-[10px] font-semibold">
-                                {p.subject} • {p.year}
-                              </span>
-                              <span className="px-2 py-0.5 rounded-md bg-white/5 text-zinc-400 text-[10px]">
-                                {p.examType}
-                              </span>
-                            </div>
-                            <p className="text-xs text-zinc-500">
-                              Uploaded: {new Date(p.uploadedAt).toLocaleDateString()} • {p.uploaderName || 'Student'}
-                            </p>
-                          </div>
+                  {(() => {
+                    const normSearch = paperSearch.trim().toLowerCase();
+                    const matchesFilter = (p: PastPaperItem) => {
+                      const matchesText =
+                        !normSearch ||
+                        p.title.toLowerCase().includes(normSearch) ||
+                        p.subject.toLowerCase().includes(normSearch) ||
+                        String(p.year).includes(normSearch) ||
+                        (p.uploaderEmail || '').toLowerCase().includes(normSearch) ||
+                        (p.uploaderName || '').toLowerCase().includes(normSearch);
+                      const matchesSubj =
+                        paperSubjectFilter === 'All' || p.subject === paperSubjectFilter;
+                      return matchesText && matchesSubj;
+                    };
 
-                          <div className="flex items-center gap-2">
-                            {p.downloadUrl && p.downloadUrl !== '#' && (
-                              <button
-                                onClick={() => setPreviewPdfPaper(p)}
-                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300"
-                              >
-                                Preview PDF
-                              </button>
+                    const filteredQuarantined = quarantinedPapers.filter(matchesFilter);
+                    const filteredPublished = publishedPapers.filter(matchesFilter);
+
+                    const showQuarantined =
+                      paperViewFilter === 'all' || paperViewFilter === 'quarantined';
+                    const showPublished =
+                      paperViewFilter === 'all' || paperViewFilter === 'published';
+
+                    return (
+                      <div className="space-y-8">
+                        {/* QUARANTINED SECTION */}
+                        {showQuarantined && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+                                <span>Quarantined Moderation Queue</span>
+                                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-mono">
+                                  {filteredQuarantined.length} {filteredQuarantined.length !== quarantinedPapers.length && `of ${quarantinedPapers.length}`}
+                                </span>
+                              </h3>
+                              <span className="text-[11px] text-zinc-500">Requires Owner Verification</span>
+                            </div>
+
+                            {filteredQuarantined.length === 0 ? (
+                              <div className="border border-dashed border-white/10 rounded-3xl p-8 text-center text-xs text-zinc-500 bg-[#141416]/40">
+                                {paperSearch || paperSubjectFilter !== 'All'
+                                  ? 'No quarantined papers match your search and filter criteria.'
+                                  : 'No papers currently awaiting quarantine moderation.'}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-3">
+                                {filteredQuarantined.map((p) => (
+                                  <div
+                                    key={p.id}
+                                    className="bg-[#141416] border border-white/10 hover:border-amber-500/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 transition-all"
+                                  >
+                                    <div className="space-y-1.5 max-w-xl">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-bold text-white">{p.title}</span>
+                                        <span className="px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-semibold border border-amber-500/25">
+                                          {p.subject} • {p.year}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded-md bg-white/5 text-zinc-400 text-[10px]">
+                                          {p.examType}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-zinc-400">
+                                        Uploaded by: <span className="text-zinc-200">{p.uploaderName || 'Student'}</span>{' '}
+                                        <span className="text-zinc-500">({p.uploaderEmail || 'anonymous'})</span> •{' '}
+                                        <span className="font-mono text-zinc-500">{new Date(p.uploadedAt).toLocaleString()}</span>
+                                      </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {p.downloadUrl && p.downloadUrl !== '#' && (
+                                        <button
+                                          onClick={() => setPreviewPdfPaper(p)}
+                                          className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
+                                        >
+                                          <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                                          <span>Preview</span>
+                                        </button>
+                                      )}
+                                      <button
+                                        onClick={() => handleApprovePaper(p.id)}
+                                        className="px-3.5 py-1.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md"
+                                      >
+                                        Approve &amp; Publish
+                                      </button>
+                                      <button
+                                        onClick={() => handleRejectPaper(p.id)}
+                                        className="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs transition-all"
+                                      >
+                                        Reject
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteQuarantinedPaper(p.id, p.title)}
+                                        className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white border border-rose-500/40 text-xs flex items-center gap-1.5 font-semibold transition-all active:scale-95 shadow-sm"
+                                        title="Permanent Delete PDF"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                        <span>Delete Paper</span>
+                                      </button>
+                                      {p.uploaderEmail && (
+                                        <button
+                                          onClick={() => handleBanUploader(p.uploaderEmail)}
+                                          className="px-2.5 py-1.5 rounded-xl bg-zinc-800 text-zinc-400 hover:text-rose-400 text-xs transition-colors"
+                                          title="Ban uploader"
+                                        >
+                                          Ban
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             )}
-                            <button
-                              onClick={() => handleDeletePublishedPaper(p.id)}
-                              className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-xs flex items-center gap-1 font-semibold transition-all"
-                              title="Delete from Library & Cloud"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete Paper</span>
-                            </button>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        )}
+
+                        {/* APPROVED PUBLISHED PAPERS SECTION */}
+                        {showPublished && (
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#A3E635]" />
+                                <span>Approved Library Papers</span>
+                                <span className="px-2 py-0.5 rounded-full bg-[#A3E635]/15 text-[#A3E635] text-[11px] font-mono">
+                                  {filteredPublished.length} {filteredPublished.length !== publishedPapers.length && `of ${publishedPapers.length}`}
+                                </span>
+                              </h3>
+                              <span className="text-[11px] text-zinc-500">Live in Public Library</span>
+                            </div>
+
+                            {filteredPublished.length === 0 ? (
+                              <div className="border border-dashed border-white/10 rounded-3xl p-8 text-center text-xs text-zinc-500 bg-[#141416]/40">
+                                {paperSearch || paperSubjectFilter !== 'All'
+                                  ? 'No published papers match your search and filter criteria.'
+                                  : 'No papers published to library yet.'}
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-1 gap-3">
+                                {filteredPublished.map((p) => (
+                                  <div
+                                    key={p.id}
+                                    className="bg-[#141416] border border-white/10 hover:border-[#A3E635]/30 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 transition-all"
+                                  >
+                                    <div className="space-y-1.5 max-w-xl">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-bold text-white">{p.title}</span>
+                                        <span className="px-2.5 py-0.5 rounded-full bg-[#A3E635]/15 text-[#A3E635] text-[10px] font-semibold border border-[#A3E635]/25">
+                                          {p.subject} • {p.year}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded-md bg-white/5 text-zinc-400 text-[10px]">
+                                          {p.examType}
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-zinc-400">
+                                        Contributor: <span className="text-zinc-200">{p.uploaderName || 'Student'}</span> •{' '}
+                                        Uploaded: <span className="font-mono text-zinc-500">{new Date(p.uploadedAt).toLocaleDateString()}</span>
+                                      </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {p.downloadUrl && p.downloadUrl !== '#' && (
+                                        <>
+                                          <button
+                                            onClick={() => setPreviewPdfPaper(p)}
+                                            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
+                                          >
+                                            <Eye className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Preview</span>
+                                          </button>
+                                          <a
+                                            href={p.downloadUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300 flex items-center gap-1.5 transition-colors"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
+                                            <span>Drive File</span>
+                                          </a>
+                                        </>
+                                      )}
+                                      <button
+                                        onClick={() => handleDeletePublishedPaper(p.id, p.title)}
+                                        className="px-3 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 hover:text-white border border-rose-500/40 text-xs flex items-center gap-1.5 font-semibold transition-all active:scale-95 shadow-sm"
+                                        title="Delete Paper from Library & Cloud"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                        <span>Delete Paper</span>
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </>
           )}
         </main>
       </div>
+
+      {/* Confirmation Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#141416]/95 border border-[#A3E635]/40 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-xl animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-5 h-5 text-[#A3E635] shrink-0" />
+          <span className="text-xs font-medium">{toastMessage}</span>
+          <button onClick={() => setToastMessage(null)} className="text-zinc-400 hover:text-white ml-2 p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* PDF In-App Preview Modal */}
       {previewPdfPaper && (

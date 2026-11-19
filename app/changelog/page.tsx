@@ -18,6 +18,52 @@ import { fetchChangelogEntries } from '@/lib/feedbackService';
 // Verified Production Release Baseline (Cleaned of all fake #FB ticket IDs and internal jargon)
 const DEFAULT_RELEASES: ChangelogEntry[] = [
   {
+    version: 'v1.6.0',
+    date: 'November 19, 2026',
+    headline: 'Live Cloud Leaderboards, Multi-PDF Vault & Ambient Focus Synthesizer',
+    plainEnglishSummary:
+      'v1.6.0 brings live Google Sheets community leaderboards, 10+ multi-PDF past paper resource types with 1-click admin purges, zero-asset Web Audio ambient soundscapes, study ROI velocity predictor, and zero-drop Firestore user synchronization.',
+    fixedFeedbackIds: [],
+    tag: 'major',
+    isLatest: true,
+    shippedFixes: [
+      {
+        title: 'Resilient Firestore Users Database & Zero-Drop Auth',
+        description: 'Hardened dual-cloud synchronization with durable write-ahead offline queue and resilient user session recovery across Google OAuth authentications.',
+        tag: 'Fix'
+      },
+      {
+        title: 'Zero-Lag Command Bar Quick Logging',
+        description: 'Added 1-click instantaneous study presets (+50m Maths, +50m Physics, +30m Past Paper, +15m Break) directly on the top command bar with immediate optimistic state update.',
+        tag: 'Fix'
+      }
+    ],
+    uxRefinements: [
+      {
+        title: 'Web Audio Ambient Sound Synthesizer',
+        description: 'Built-in procedural soundscape engine with mathematical Rain, 10Hz Alpha Binaural Beats, Deep Brown Noise, and Lo-Fi Static with zero external audio assets or network latency.',
+        tag: 'UX'
+      },
+      {
+        title: 'Study Velocity & Target Z-Score Predictor',
+        description: 'Predictive mathematical model analyzing historical logged focus hours, daily velocity, and countdown horizon to forecast university admission Z-Scores with pace alerts.',
+        tag: 'UX'
+      }
+    ],
+    communityFeatures: [
+      {
+        title: 'Live Google Sheets Community Leaderboard',
+        description: 'Real-time multi-student leaderboard powered by live Google Sheets backend (1rIDV6vEjqLxHjaP2jLfJbkM4WqDe9r9SwNYBekMjy0E) with active rank badges, weekly streaks, and focus metrics.',
+        tag: 'Feature'
+      },
+      {
+        title: '10+ Multi-PDF Resource Types & 1-Click Admin Purge',
+        description: 'Expanded past papers library supporting 10+ structured educational document classifications, multi-part PDF bundles, and instant 1-click admin paper database purge.',
+        tag: 'Feature'
+      }
+    ]
+  },
+  {
     version: 'v1.5.0',
     date: 'November 19, 2026',
     headline: 'Past Papers Vault, Forum & Study Velocity',
@@ -25,7 +71,7 @@ const DEFAULT_RELEASES: ChangelogEntry[] = [
       'Major update introducing the Past Papers Google Drive library, peer solution forums, customizable daily study targets, and Pomodoro & Past Paper exam timers.',
     fixedFeedbackIds: [],
     tag: 'major',
-    isLatest: true,
+    isLatest: false,
     shippedFixes: [
       {
         title: 'Instant Dashboard Reactivity',
