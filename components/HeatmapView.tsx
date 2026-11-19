@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Calendar, AlertTriangle, Clock, TrendingUp } from 'lucide-react';
+import { Calendar, AlertTriangle, Clock, TrendingUp, BookOpen, CheckCircle } from 'lucide-react';
 import { HeatmapCell, DayActivitySummary, TelemetryBlock } from '@/lib/types';
+import { telemetryStore } from '@/lib/telemetryStore';
 
 interface HeatmapViewProps {
   heatmapData: HeatmapCell[];
@@ -18,16 +19,29 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
 
   // Compute top distractions from real blocks
   const distractionMap: Record<string, number> = {};
+  const hourlyWastedMap: Record<number, number> = {};
+
   blocks
     .filter((b) => b.category === 'wasted')
     .forEach((b) => {
       const title = b.title || b.label || 'Distraction';
       distractionMap[title] = (distractionMap[title] || 0) + (b.durationMinutes || 0);
+
+      const d = new Date(b.startTime);
+      const h = !isNaN(d.getTime()) ? d.getHours() : parseInt(b.startTime.split(':')[0] || '14', 10);
+      hourlyWastedMap[h] = (hourlyWastedMap[h] || 0) + (b.durationMinutes || 0);
     });
 
   const sortedDistractions = Object.entries(distractionMap)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
+
+  // Compute dynamic peak distraction hours from actual data
+  const sortedHourlyWasted = Object.entries(hourlyWastedMap)
+    .map(([h, mins]) => ({ hour: parseInt(h, 10), minutes: mins }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  const subjectBreakdown = telemetryStore.getSubjectBreakdown();
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -35,7 +49,7 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
       <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl">
         <h1 className="text-xl font-bold text-white tracking-tight">Analytics & Weekly Activity Heatmap</h1>
         <p className="text-xs text-zinc-400 mt-1">
-          7-day hourly breakdown identifying your peak focus windows and top distraction hours
+          7-day hourly breakdown identifying your peak focus windows, subject allocation, and distraction patterns
         </p>
       </div>
 
@@ -81,7 +95,7 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
                               ? 'bg-[#A3E635]/20 border-[#A3E635]/30 text-[#A3E635]'
                               : 'bg-white/5 border-white/5 text-zinc-600'
                           }`}
-                          title={`${wasted}m wasted, ${focus}m focus`}
+                          title={`${hourStr} on ${days[dayIdx]}: ${wasted}m wasted, ${focus}m focus`}
                         >
                           {wasted > 0 ? `${wasted}m` : focus > 0 ? `${focus}m` : ''}
                         </div>
@@ -111,45 +125,107 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
         </div>
       </div>
 
-      {/* Row: Top Distractions & Peak Distraction Hours */}
+      {/* Row: Subject Distribution Breakdown */}
+      <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <BookOpen className="w-4 h-4 text-[#A3E635]" />
+            <h2 className="text-base font-bold text-white">Subject-wise Study Time</h2>
+          </div>
+          <span className="text-xs text-zinc-400">Combined Maths, Physics, Past Paper & Revision</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {subjectBreakdown.map((s) => (
+            <div key={s.subject} className="p-4 rounded-2xl bg-[#08080A] border border-white/5 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-white">
+                <span>{s.subject}</span>
+                <span className="tabular-nums text-[#A3E635]">{s.hours}h</span>
+              </div>
+              <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${s.percentage}%`, backgroundColor: s.color }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                <span>{s.percentage}% of study total</span>
+                <span>{s.minutes} mins</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Row: Top Distractions & Real Peak Distraction Hours */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Top Distractions */}
         <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
           <h2 className="text-base font-bold text-white">Top Distractions</h2>
           {sortedDistractions.length === 0 ? (
-            <p className="text-xs text-zinc-500">No distraction sessions logged yet</p>
+            <div className="p-8 text-center text-xs text-zinc-500">
+              No distraction sessions recorded. Great discipline!
+            </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {sortedDistractions.map(([app, mins]) => (
-                <div
-                  key={app}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-[#08080A] border border-white/5"
-                >
-                  <span className="text-xs font-semibold text-white">{app}</span>
-                  <span className="text-xs font-bold text-rose-400 tabular-nums">{mins}m</span>
+                <div key={app} className="space-y-1">
+                  <div className="flex justify-between text-xs text-zinc-300">
+                    <span className="font-semibold">{app}</span>
+                    <span className="tabular-nums">{mins} mins</span>
+                  </div>
+                  <div className="w-full bg-white/5 h-2 rounded-full overflow-hidden">
+                    <div
+                      className="bg-rose-500 h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.round((mins / 120) * 100))}%`
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Peak Distraction Hours */}
+        {/* Dynamic Peak Distraction Hours - Hardcoded fake data removed */}
         <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl space-y-4">
           <h2 className="text-base font-bold text-white">Peak Distraction Hours</h2>
-          <div className="space-y-2.5 text-xs text-zinc-300">
-            <div className="p-3.5 rounded-2xl bg-[#08080A] border border-white/5 flex items-center justify-between">
-              <span>Early Afternoon (14:00 – 16:00)</span>
-              <span className="text-rose-400 font-bold">Highest Risk</span>
+          {sortedHourlyWasted.length === 0 ? (
+            <div className="p-8 text-center space-y-2">
+              <CheckCircle className="w-8 h-8 text-[#A3E635] mx-auto opacity-80" />
+              <p className="text-xs font-semibold text-white">Zero distraction sessions recorded</p>
+              <p className="text-[11px] text-zinc-500">
+                Your focus schedule is completely clean. Any recorded distraction periods will be calculated dynamically here.
+              </p>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#08080A] border border-white/5 flex items-center justify-between">
-              <span>Late Evening (21:00 – 23:00)</span>
-              <span className="text-amber-400 font-bold">Secondary Dip</span>
+          ) : (
+            <div className="space-y-2.5 text-xs text-zinc-300">
+              {sortedHourlyWasted.slice(0, 3).map((item, idx) => {
+                const hourStr = `${item.hour.toString().padStart(2, '0')}:00 – ${((item.hour + 1) % 24).toString().padStart(2, '0')}:00`;
+                const isTop = idx === 0;
+
+                return (
+                  <div
+                    key={item.hour}
+                    className="p-3.5 rounded-2xl bg-[#08080A] border border-white/5 flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-medium text-white">{hourStr}</span>
+                      <p className="text-[10px] text-zinc-500 mt-0.5">{item.minutes} minutes wasted</p>
+                    </div>
+                    <span
+                      className={`font-bold text-xs ${
+                        isTop ? 'text-rose-400' : 'text-amber-400'
+                      }`}
+                    >
+                      {isTop ? 'Highest Risk' : 'Secondary Dip'}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#08080A] border border-white/5 flex items-center justify-between">
-              <span>Morning Peak (08:30 – 11:30)</span>
-              <span className="text-[#A3E635] font-bold">Optimal Focus</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

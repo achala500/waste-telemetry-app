@@ -1,14 +1,23 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Plus, Trash2, Edit3, Sparkles } from 'lucide-react';
-import { TelemetryBlock, BlockCategory } from '@/lib/types';
+import { TelemetryBlock, BlockCategory, SubjectTag } from '@/lib/types';
 import { telemetryStore } from '@/lib/telemetryStore';
 
 interface Timeline24HourProps {
   blocks: TelemetryBlock[];
   selectedDate: string;
   onOpenQuickLogAtTime?: (timeStr: string) => void;
+}
+
+interface LayoutBlock {
+  block: TelemetryBlock;
+  startMins: number;
+  durMins: number;
+  endMins: number;
+  trackIndex: number;
+  totalTracks: number;
 }
 
 export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
@@ -30,11 +39,21 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
   const TOTAL_HOURS = END_HOUR - START_HOUR;
   const TOTAL_MINUTES = TOTAL_HOURS * 60;
 
-  // Filter blocks for selected date
-  const dayBlocks = blocks.filter((b) => {
-    const blockDate = b.startTime.includes('T') ? b.startTime.split('T')[0] : b.date;
-    return blockDate === selectedDate;
-  });
+  // Filter blocks for selected date using local timezone matching
+  const dayBlocks = useMemo(() => {
+    return blocks.filter((b) => {
+      if (b.startTime && b.startTime.includes('T')) {
+        const d = new Date(b.startTime);
+        if (!isNaN(d.getTime())) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${year}-${month}-${day}` === selectedDate;
+        }
+      }
+      return (b.date || b.startTime.split('T')[0]) === selectedDate;
+    });
+  }, [blocks, selectedDate]);
 
   const getMinutesFromDayStart = (timeStr: string): number => {
     const dateObj = new Date(timeStr);
@@ -60,24 +79,83 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
     let endStr = '00:00';
 
     if (b.startTime.includes('T')) {
-      startStr = formatClockTime(new Date(b.startTime));
+      const d = new Date(b.startTime);
+      if (!isNaN(d.getTime())) startStr = formatClockTime(d);
     } else {
-      startStr = b.startTime;
+      startStr = b.startTime.slice(0, 5);
     }
 
     if (b.endTime && b.endTime.includes('T')) {
-      endStr = formatClockTime(new Date(b.endTime));
+      const d = new Date(b.endTime);
+      if (!isNaN(d.getTime())) endStr = formatClockTime(d);
     } else if (b.endTime) {
-      endStr = b.endTime;
+      endStr = b.endTime.slice(0, 5);
     } else {
       const dur = b.durationMinutes || 30;
       const [h, m] = startStr.split(':').map((x) => parseInt(x, 10));
-      const endTotal = h * 60 + m + dur;
-      endStr = `${Math.floor(endTotal / 60).toString().padStart(2, '0')}:${(endTotal % 60).toString().padStart(2, '0')}`;
+      const endTotal = (h || 0) * 60 + (m || 0) + dur;
+      endStr = `${Math.floor((endTotal / 60) % 24).toString().padStart(2, '0')}:${(endTotal % 60).toString().padStart(2, '0')}`;
     }
 
     return `${startStr} – ${endStr}`;
   };
+
+  // Compute overlapping lanes / tracks for side-by-side rendering
+  const layoutBlocks = useMemo<LayoutBlock[]>(() => {
+    if (dayBlocks.length === 0) return [];
+
+    const parsed = dayBlocks.map((b) => {
+      const startMins = Math.max(0, getMinutesFromDayStart(b.startTime));
+      const durMins = Math.max(15, b.durationMinutes || 30);
+      const endMins = startMins + durMins;
+      return { block: b, startMins, durMins, endMins };
+    });
+
+    // Sort by startMins ascending
+    parsed.sort((a, b) => a.startMins - b.startMins);
+
+    // Track assignment
+    const tracks: number[] = []; // tracks[i] = endMins of last block in track i
+    const assigned = parsed.map((item) => {
+      let chosenTrack = -1;
+      for (let t = 0; t < tracks.length; t++) {
+        if (tracks[t] <= item.startMins) {
+          chosenTrack = t;
+          tracks[t] = item.endMins;
+          break;
+        }
+      }
+      if (chosenTrack === -1) {
+        chosenTrack = tracks.length;
+        tracks.push(item.endMins);
+      }
+      return {
+        ...item,
+        trackIndex: chosenTrack,
+        totalTracks: 1 // updated below
+      };
+    });
+
+    // Compute total tracks for each overlapping cluster
+    for (let i = 0; i < assigned.length; i++) {
+      let maxTrackInCluster = assigned[i].trackIndex;
+      for (let j = 0; j < assigned.length; j++) {
+        if (i !== j) {
+          // Check if intervals overlap
+          if (assigned[i].startMins < assigned[j].endMins && assigned[j].startMins < assigned[i].endMins) {
+            maxTrackInCluster = Math.max(maxTrackInCluster, assigned[j].trackIndex);
+          }
+        }
+      }
+      assigned[i].totalTracks = maxTrackInCluster + 1;
+    }
+
+    return assigned;
+  }, [dayBlocks]);
+
+  const maxTotalTracks = useMemo(() => {
+    return Math.max(1, ...layoutBlocks.map((b) => b.totalTracks));
+  }, [layoutBlocks]);
 
   // Live needle calculation
   const [liveNeedleMinutes, setLiveNeedleMinutes] = useState<number | null>(null);
@@ -113,7 +191,7 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
     setHoverX(null);
   };
 
-  const handleTimelineClick = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleTimelineClick = () => {
     if (hoverTime && onOpenQuickLogAtTime) {
       onOpenQuickLogAtTime(hoverTime);
     }
@@ -151,14 +229,20 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
     setTimeout(() => setToastMessage(null), 2000);
   };
 
-  const handleAddPreset = (label: string, category: BlockCategory, tag: string, durationMinutes: number) => {
+  const handleAddPreset = (
+    label: string,
+    category: BlockCategory,
+    tag: string,
+    durationMinutes: number,
+    subject?: SubjectTag
+  ) => {
     const now = new Date();
-    const startStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     telemetryStore.addBlock({
-      id: `block_${Date.now()}`,
+      id: `block_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       title: label,
       category,
       tag,
+      subject,
       durationMinutes,
       startTime: now.toISOString(),
       date: selectedDate,
@@ -168,34 +252,43 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
     setTimeout(() => setToastMessage(null), 2000);
   };
 
+  // Canvas height dynamically scales with overlapping tracks
+  const canvasHeight = Math.max(140, 48 + maxTotalTracks * 44);
+
   return (
     <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl space-y-5">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-white tracking-tight">Today's Timeline</h2>
-          <p className="text-xs text-zinc-400">06:00 – 00:00 full daily schedule</p>
+          <p className="text-xs text-zinc-400">06:00 – 24:00 daily schedule (concurrent sessions rendered side-by-side)</p>
         </div>
 
-        {/* 1-Tap Preset Quick Chips */}
+        {/* 1-Tap Preset Quick Chips with Subject Support */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
-            onClick={() => handleAddPreset('Deep Work', 'focus', 'Engineering', 45)}
-            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-white transition-all active:scale-95"
+            onClick={() => handleAddPreset('Deep Work', 'focus', 'Study', 45, 'Combined Maths')}
+            className="px-3 py-1.5 rounded-xl bg-[#A3E635]/15 hover:bg-[#A3E635]/25 border border-[#A3E635]/30 text-xs font-semibold text-[#A3E635] transition-all active:scale-95 shadow-sm"
           >
             +45m Deep Work
           </button>
           <button
-            onClick={() => handleAddPreset('Pomodoro', 'focus', 'Study', 25)}
+            onClick={() => handleAddPreset('Physics Revision', 'focus', 'Study', 50, 'Physics')}
+            className="px-3 py-1.5 rounded-xl bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25 border border-[#38BDF8]/30 text-xs font-semibold text-[#38BDF8] transition-all active:scale-95 shadow-sm"
+          >
+            +50m Physics
+          </button>
+          <button
+            onClick={() => handleAddPreset('Past Paper Drill', 'focus', 'Exam', 120, 'Past Paper')}
+            className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-xs font-semibold text-amber-300 transition-all active:scale-95 shadow-sm"
+          >
+            +2h Past Paper
+          </button>
+          <button
+            onClick={() => handleAddPreset('Pomodoro Sprint', 'focus', 'Study', 25, 'Revision')}
             className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-white transition-all active:scale-95"
           >
             +25m Pomodoro
-          </button>
-          <button
-            onClick={() => handleAddPreset('Team Sync', 'routine', 'Meeting', 15)}
-            className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-medium text-white transition-all active:scale-95"
-          >
-            +15m Sync
           </button>
           <button
             onClick={() => handleAddPreset('Instagram Reels', 'wasted', 'Social', 30)}
@@ -206,24 +299,36 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
         </div>
       </div>
 
-      {/* Timeline Interactive Canvas */}
-      <div className="relative overflow-x-auto pb-4 pt-2 -mx-2 px-2 scrollbar-thin">
+      {/* Timeline Interactive Canvas - Fluid, no desktop horizontal scrollbar */}
+      <div className="relative w-full pb-2 pt-2">
         <div
           ref={containerRef}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onClick={handleTimelineClick}
-          className="relative min-w-[1000px] h-36 bg-[#08080A] border border-white/10 rounded-2xl p-2 cursor-crosshair select-none"
+          style={{ height: `${canvasHeight}px` }}
+          className="relative w-full bg-[#08080A] border border-white/10 rounded-2xl p-2 cursor-crosshair select-none overflow-hidden"
         >
-          {/* Hour Grid Markers */}
-          <div className="absolute inset-x-2 top-0 bottom-6 flex justify-between pointer-events-none">
+          {/* Hour Grid Markers with Non-Clipping Anchors */}
+          <div className="absolute inset-x-3 top-0 bottom-6 flex justify-between pointer-events-none">
             {Array.from({ length: TOTAL_HOURS + 1 }).map((_, i) => {
               const hourNum = START_HOUR + i;
               const hourStr = `${hourNum.toString().padStart(2, '0')}:00`;
+              const isFirst = i === 0;
+              const isLast = i === TOTAL_HOURS;
+
               return (
-                <div key={i} className="flex flex-col items-center h-full">
+                <div key={i} className="flex flex-col items-center h-full relative">
                   <div className="w-px h-full bg-white/5" />
-                  <span className="text-[10px] text-zinc-500 font-medium tabular-nums mt-1">
+                  <span
+                    className={`absolute bottom-0 text-[10px] text-zinc-500 font-medium tabular-nums ${
+                      isFirst
+                        ? 'left-0 text-left'
+                        : isLast
+                        ? 'right-0 text-right'
+                        : '-translate-x-1/2 text-center'
+                    }`}
+                  >
                     {hourStr}
                   </span>
                 </div>
@@ -234,10 +339,10 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
           {/* Live Needle with Glowing Pill Indicator */}
           {liveNeedleMinutes !== null && (
             <div
-              className="absolute top-0 bottom-0 w-0.5 bg-[#A3E635] pointer-events-none z-20 shadow-[0_0_12px_#A3E635]"
+              className="absolute top-0 bottom-6 w-0.5 bg-[#A3E635] pointer-events-none z-20 shadow-[0_0_12px_#A3E635]"
               style={{ left: `${(liveNeedleMinutes / TOTAL_MINUTES) * 100}%` }}
             >
-              <div className="absolute -top-3 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-[#A3E635] text-black text-[9px] font-bold shadow-md">
+              <div className="absolute -top-1 -translate-x-1/2 px-1.5 py-0.5 rounded-full bg-[#A3E635] text-black text-[9px] font-bold shadow-md">
                 NOW
               </div>
             </div>
@@ -246,30 +351,34 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
           {/* Hover Crosshair */}
           {hoverX !== null && hoverTime && (
             <div
-              className="absolute top-0 bottom-0 w-px bg-white/30 pointer-events-none z-10"
+              className="absolute top-0 bottom-6 w-px bg-white/30 pointer-events-none z-10"
               style={{ left: `${hoverX}px` }}
             >
-              <div className="absolute -top-3 -translate-x-1/2 px-1.5 py-0.5 rounded bg-zinc-800 text-white text-[9px] font-semibold border border-white/20">
+              <div className="absolute -top-1 -translate-x-1/2 px-1.5 py-0.5 rounded bg-zinc-800 text-white text-[9px] font-semibold border border-white/20">
                 + {hoverTime}
               </div>
             </div>
           )}
 
-          {/* Timeline Cards Container */}
-          <div className="absolute inset-x-2 top-3 bottom-8 flex items-center">
-            {dayBlocks.length === 0 ? (
-              <div className="w-full flex items-center justify-center text-xs text-zinc-500 py-6 pointer-events-none">
-                Log your first focus or distraction block above
+          {/* Timeline Cards Container - Rendered Side-by-Side on Overlap */}
+          <div className="absolute inset-x-3 top-2 bottom-8">
+            {layoutBlocks.length === 0 ? (
+              <div className="w-full h-full flex items-center justify-center text-xs text-zinc-500 pointer-events-none">
+                Click anywhere on the timeline or use +45m Deep Work above to log a session
               </div>
             ) : (
-              dayBlocks.map((block) => {
-                const startMins = Math.max(0, getMinutesFromDayStart(block.startTime));
-                const dur = block.durationMinutes || 30;
+              layoutBlocks.map((item) => {
+                const { block, startMins, durMins, trackIndex, totalTracks } = item;
                 const leftPct = (startMins / TOTAL_MINUTES) * 100;
-                const widthPct = Math.max(14, (dur / TOTAL_MINUTES) * 100);
+                const widthPct = Math.max(8, (durMins / TOTAL_MINUTES) * 100);
 
                 const isFocus = block.category === 'focus';
                 const isWasted = block.category === 'wasted';
+
+                // Calculate lane height and top
+                const totalHeightAvailable = canvasHeight - 44;
+                const trackHeight = Math.max(34, Math.floor(totalHeightAvailable / totalTracks) - 4);
+                const trackTop = 2 + trackIndex * (trackHeight + 4);
 
                 return (
                   <div
@@ -281,29 +390,35 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
                     style={{
                       left: `${leftPct}%`,
                       width: `${widthPct}%`,
-                      minWidth: '140px',
-                      height: '84px'
+                      minWidth: '100px',
+                      top: `${trackTop}px`,
+                      height: `${trackHeight}px`
                     }}
-                    className={`absolute rounded-2xl p-2.5 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:z-30 ${
+                    className={`absolute rounded-xl p-2 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] hover:z-30 overflow-hidden ${
                       isFocus
-                        ? 'bg-[#182613] border-[#A3E635]/40 text-[#A3E635]'
+                        ? 'bg-[#182613]/90 border-[#A3E635]/40 text-[#A3E635]'
                         : isWasted
-                        ? 'bg-[#291316] border-rose-500/40 text-rose-300'
-                        : 'bg-[#131c26] border-[#38BDF8]/40 text-[#38BDF8]'
+                        ? 'bg-[#291316]/90 border-rose-500/40 text-rose-300'
+                        : 'bg-[#131c26]/90 border-[#38BDF8]/40 text-[#38BDF8]'
                     }`}
                   >
-                    {/* Line 1: Time Range */}
-                    <div className="text-[10px] font-medium text-zinc-400 tabular-nums leading-none">
-                      {getBlockTimeRange(block)}
+                    {/* Line 1: Time Range + Subject Tag */}
+                    <div className="flex items-center justify-between text-[9px] font-medium text-zinc-400 tabular-nums leading-none">
+                      <span className="truncate">{getBlockTimeRange(block)}</span>
+                      {block.subject && (
+                        <span className="ml-1 px-1 rounded bg-white/10 text-white text-[8px] font-bold shrink-0">
+                          {block.subject}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Line 2: Full Bold Title (NO 3-letter stubs or truncation) */}
-                    <div className="text-xs font-bold text-white truncate leading-tight mt-1">
+                    {/* Line 2: Full Bold Title */}
+                    <div className="text-xs font-bold text-white truncate leading-tight">
                       {block.title || block.label}
                     </div>
 
-                    {/* Line 3: Duration + Tag */}
-                    <div className="text-[10px] font-medium opacity-90 leading-none mt-1">
+                    {/* Line 3: Duration */}
+                    <div className="text-[9px] font-medium opacity-80 leading-none">
                       {block.durationMinutes}m • {block.tag || (isFocus ? 'Focus' : isWasted ? 'Distraction' : 'Routine')}
                     </div>
                   </div>
@@ -319,7 +434,14 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
         <div className="bg-[#08080A] border border-white/10 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 animate-in fade-in zoom-in-95 duration-150">
           <div>
             <div className="text-xs text-zinc-400">{getBlockTimeRange(selectedBlock)}</div>
-            <div className="text-sm font-bold text-white mt-0.5">{selectedBlock.title || selectedBlock.label}</div>
+            <div className="text-sm font-bold text-white mt-0.5 flex items-center gap-2">
+              <span>{selectedBlock.title || selectedBlock.label}</span>
+              {selectedBlock.subject && (
+                <span className="px-2 py-0.5 rounded-md bg-[#A3E635]/15 text-[#A3E635] text-[10px] font-semibold">
+                  {selectedBlock.subject}
+                </span>
+              )}
+            </div>
             <div className="text-xs text-zinc-500 mt-0.5">
               {selectedBlock.durationMinutes} minutes • Category: <span className="capitalize text-zinc-300">{selectedBlock.category}</span>
             </div>
@@ -340,7 +462,7 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
               +15m
             </button>
 
-            {/* Tag Switchers */}
+            {/* Category Switchers */}
             <button
               onClick={() => handleTagSwitch(selectedBlock, 'focus')}
               className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold ${

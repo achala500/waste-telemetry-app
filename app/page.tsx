@@ -13,6 +13,7 @@ import { LogLedgerView } from '@/components/LogLedgerView';
 import { QuickLogModal } from '@/components/QuickLogModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import { AuthModal } from '@/components/AuthModal';
+import { submitFeedbackTicket } from '@/lib/feedbackService';
 import { MessageSquare } from 'lucide-react';
 
 export default function ChronoApp() {
@@ -72,20 +73,12 @@ export default function ChronoApp() {
     annotatedScreenshotUrl?: string;
   }) => {
     try {
-      await fetch('/api/sheets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          feedback: {
-            feedbackId: `fb_${Date.now()}`,
-            userId: 'active_user',
-            category: feedback.category,
-            description: feedback.description,
-            annotatedScreenshotUrl: feedback.annotatedScreenshotUrl || '',
-            status: 'NEW',
-            createdAt: new Date().toISOString()
-          }
-        })
+      await submitFeedbackTicket({
+        category: feedback.category,
+        description: feedback.description,
+        annotatedScreenshotUrl: feedback.annotatedScreenshotUrl,
+        userEmail: state.user?.email || undefined,
+        userName: state.user?.displayName || undefined
       });
     } catch {
       // offline safe

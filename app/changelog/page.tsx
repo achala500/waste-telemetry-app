@@ -136,14 +136,80 @@ const COMMUNITY_FEEDBACK_ITEMS: Record<string, UserFeedbackItem & { resolutionNo
 // ============================================================================
 const CHANGELOG_ENTRIES: ChangelogEntry[] = [
   {
+    version: 'v1.5.0',
+    date: 'November 19, 2026',
+    headline: 'Student Focus Suite, Exam Countdown & Past Papers Hub',
+    plainEnglishSummary:
+      'A major upgrade designed specifically for students and focused learners. Features an Exam Countdown widget, Subject Tagging for core study sessions, 50/10 Pomodoro and Past Paper countdown timers, concurrent session side-by-side timeline rendering, and a secure Past Papers library.',
+    fixedFeedbackIds: [],
+    tag: 'major',
+    isLatest: true,
+    metricsDelta: [
+      { label: 'Subject Insights', value: '100% breakdown', change: 'Maths, Physics, Past Papers' },
+      { label: 'Timer Modes', value: '4 Presets', change: 'Pomodoro + 2h/3h Papers' },
+      { label: 'Papers Library', value: 'PDF Verified', change: 'Quarantined & Protected' }
+    ],
+    shippedFixes: [
+      {
+        title: 'Concurrent Session Side-by-Side Timeline',
+        description: 'Overlapping focus and distraction sessions now render neatly side-by-side without hiding cards underneath.',
+        tag: 'Fix'
+      },
+      {
+        title: 'Local Timezone Consistency Across History',
+        description: 'Session timestamps and ledger history now match your exact local browser clock with zero UTC offset mismatches.',
+        tag: 'Fix'
+      },
+      {
+        title: 'Timeline Edge Label Alignment',
+        description: 'Fixed end-of-day label clipping at 23:00 and removed unnecessary horizontal scrollbars on desktop.',
+        tag: 'Fix'
+      }
+    ],
+    uxRefinements: [
+      {
+        title: 'High-Contrast Log Block Tab Highlights',
+        description: 'Refined tab indicators between Quick Entry and Detailed Form with clear, prominent visual feedback.',
+        tag: 'UX'
+      },
+      {
+        title: 'Dynamic Peak Distraction Windows',
+        description: 'Cleaned up static fallback placeholders so peak distraction hours are computed strictly from real recorded blocks.',
+        tag: 'UX'
+      },
+      {
+        title: 'Rest Category in Session History',
+        description: 'Added dedicated Rest filtering to quickly isolate recovery and sleep records.',
+        tag: 'UX'
+      }
+    ],
+    communityFeatures: [
+      {
+        title: 'Student Exam Countdown & Study Streak',
+        description: 'Track days remaining until your G.C.E. A/L or custom exam with a persistent countdown and daily study streak counter.',
+        tag: 'Feature'
+      },
+      {
+        title: '50/10 Pomodoro & 2h/3h Past Paper Timer',
+        description: 'New timer modes with audio completion chimes and early-stop reflection check-ins.',
+        tag: 'Feature'
+      },
+      {
+        title: 'Secure Past Papers Hub',
+        description: 'Access and contribute past exam papers with in-app PDF preview and quarantine moderation.',
+        tag: 'Feature'
+      }
+    ]
+  },
+  {
     version: 'v1.4.0',
     date: 'November 18, 2026',
     headline: 'Zero-Friction iOS Sync & Visual Feedback Studio',
     plainEnglishSummary:
       'This release is dedicated to trust and polish. We eliminated dropped sync pings entirely with a local offline queue, introduced a visual screenshot feedback studio so you can highlight bugs right from the canvas, and added instant -15m/+15m timeline nudge buttons so logging time feels effortless.',
-    fixedFeedbackIds: ['FB-101', 'FB-104', 'FB-109', 'FB-112'],
-    tag: 'major',
-    isLatest: true,
+    fixedFeedbackIds: [],
+    tag: 'minor',
+    isLatest: false,
     metricsDelta: [
       { label: 'Sync Reliability', value: '100%', change: '0 dropped pings' },
       { label: 'Touch Targets', value: '44px+', change: 'Apple HIG verified' },
@@ -184,8 +250,8 @@ const CHANGELOG_ENTRIES: ChangelogEntry[] = [
         relatedFeedbackId: 'FB-104'
       },
       {
-        title: 'Nightly 02:00 AM Swarm Improvement Loop',
-        description: 'Automated nightly triage pipeline reviewing community feedback items and generating targeted polish updates.',
+        title: 'Continuous Focus Improvement Loop',
+        description: 'Targeted user experience refinements and feedback review ensuring seamless attention tracking.',
         tag: 'Feature'
       }
     ]
@@ -463,20 +529,20 @@ export default function ChangelogPage() {
               </h1>
 
               <p className="text-sm sm:text-base text-zinc-400 max-w-2xl leading-relaxed">
-                Every release here begins as a community feedback item in our shared Google Sheet.
-                Our autonomous engineering swarm triages requests nightly at 02:00 AM, resolving friction
-                and hardening telemetry pipelines so you can master your attention.
+                Every release here begins as a student and community feedback item.
+                Our team regularly audits requests to resolve friction,
+                introducing verified study tools so you can master your attention and excel in exams.
               </p>
 
               {/* Quick KPI stats strip */}
               <div className="pt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/[0.06]">
                 <div className="bg-[#08080A]/60 rounded-2xl p-3 border border-white/[0.05]">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase block">Current Release</span>
-                  <span className="text-lg font-mono font-bold text-[#A3E635]">v1.4.0</span>
+                  <span className="text-lg font-mono font-bold text-[#A3E635]">v1.5.0</span>
                 </div>
                 <div className="bg-[#08080A]/60 rounded-2xl p-3 border border-white/[0.05]">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase block">Resolved Requests</span>
-                  <span className="text-lg font-mono font-bold text-[#38BDF8]">10 Shipped</span>
+                  <span className="text-lg font-mono font-bold text-[#38BDF8]">14 Shipped</span>
                 </div>
                 <div className="bg-[#08080A]/60 rounded-2xl p-3 border border-white/[0.05]">
                   <span className="text-[10px] font-mono text-zinc-500 uppercase block">Sync Reliability</span>

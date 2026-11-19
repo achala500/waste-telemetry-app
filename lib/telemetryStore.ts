@@ -40,6 +40,7 @@ import {
   deleteBlockFromFirestore,
   syncUserProfileToFirestore
 } from './firestoreSync';
+import { generateAiInsights } from './insightsService';
 
 const DB_NAME = 'OmniTelemetry_v1';
 const DB_VERSION = 1;
@@ -62,6 +63,11 @@ export interface TelemetryState {
   lastSyncedAt: string | null;
   syncError: string | null;
   pendingQueueCount: number;
+  examCountdownDate: string;
+  examCountdownTitle: string;
+  studyStreak: number;
+  timerMode: 'stopwatch' | 'pomodoro' | 'paper-2h' | 'paper-3h';
+  timerTargetSeconds: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -256,7 +262,12 @@ class TelemetryStoreManager {
       isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
       lastSyncedAt: null,
       syncError: null,
-      pendingQueueCount: 0
+      pendingQueueCount: 0,
+      examCountdownDate: '2026-11-25',
+      examCountdownTitle: 'G.C.E. A/L Examination',
+      studyStreak: 1,
+      timerMode: 'stopwatch',
+      timerTargetSeconds: 0
     };
 
     if (typeof window !== 'undefined') {
@@ -338,6 +349,11 @@ class TelemetryStoreManager {
   };
 
   private notify() {
+    this.state = {
+      ...this.state,
+      blocks: [...this.state.blocks],
+      stopwatch: { ...this.state.stopwatch }
+    };
     this.listeners.forEach(fn => fn());
   }
 
@@ -756,18 +772,11 @@ class TelemetryStoreManager {
 
   public fetchAiInsights = async (): Promise<AiInsight[]> => {
     try {
-      const res = await fetch('/api/insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blocks: this.state.blocks })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.insights && Array.isArray(data.insights)) {
-          this.state.insights = data.insights;
-          this.notify();
-          return data.insights;
-        }
+      const insights = await generateAiInsights(this.state.blocks);
+      if (insights && Array.isArray(insights) && insights.length > 0) {
+        this.state.insights = insights;
+        this.notify();
+        return insights;
       }
     } catch (e) {
       console.warn('Failed to fetch AI insights:', e);
@@ -1032,20 +1041,98 @@ class TelemetryStoreManager {
     return days;
   };
 
+  public getWeeklyActivitySummary = (): DayActivitySummary[] => {
+    return this.getWeeklySummary();
+  };
+
+  public getSubjectBreakdown = (): Array<{ subject: string; minutes: number; hours: number; percentage: number; color: string }> => {
+    const subjectMap: Record<string, number> = {
+      'Combined Maths': 0,
+      'Physics': 0,
+      'Past Paper': 0,
+      'Revision': 0,
+      'Other': 0
+    };
+
+    let totalFocusMins = 0;
+    this.state.blocks.forEach(b => {
+      if (b.category === 'focus') {
+        totalFocusMins += b.durationMinutes;
+        const subj = b.subject || (b.tag === 'Study' ? 'Revision' : 'Other');
+        if (subj in subjectMap) {
+          subjectMap[subj] += b.durationMinutes;
+        } else {
+          subjectMap['Other'] += b.durationMinutes;
+        }
+      }
+    });
+
+    const colors: Record<string, string> = {
+      'Combined Maths': '#A3E635',
+      'Physics': '#38BDF8',
+      'Past Paper': '#F59E0B',
+      'Revision': '#A855F7',
+      'Other': '#71717A'
+    };
+
+    return Object.entries(subjectMap).map(([subject, minutes]) => ({
+      subject,
+      minutes,
+      hours: parseFloat((minutes / 60).toFixed(1)),
+      percentage: totalFocusMins > 0 ? Math.round((minutes / totalFocusMins) * 100) : 0,
+      color: colors[subject] || '#A3E635'
+    }));
+  };
+
+  public setExamCountdown = (date: string, title?: string) => {
+    this.state.examCountdownDate = date;
+    if (title) this.state.examCountdownTitle = title;
+    try {
+      localStorage.setItem('chrono_exam_date', date);
+      if (title) localStorage.setItem('chrono_exam_title', title);
+    } catch {}
+    this.notify();
+  };
+
+  public setTimerMode = (mode: 'stopwatch' | 'pomodoro' | 'paper-2h' | 'paper-3h', targetSeconds = 0) => {
+    this.state.timerMode = mode;
+    this.state.timerTargetSeconds = targetSeconds;
+    this.notify();
+  };
+
+  public getStudyStreak = (): number => {
+    const datesWithFocus = new Set(
+      this.state.blocks
+        .filter(b => b.category === 'focus')
+        .map(b => (b.startTime.includes('T') ? b.startTime.split('T')[0] : b.date || ''))
+        .filter(Boolean)
+    );
+
+    let streak = 0;
+    const now = new Date();
+    for (let i = 0; i < 365; i++) {
+      const checkDate = new Date(now);
+      checkDate.setDate(now.getDate() - i);
+      const str = checkDate.toISOString().split('T')[0];
+      if (datesWithFocus.has(str)) {
+        streak++;
+      } else if (i === 0) {
+        // Today might not have focus yet, continue to check yesterday
+        continue;
+      } else {
+        break;
+      }
+    }
+    return Math.max(1, streak);
+  };
+
   public refreshInsights = async (): Promise<AiInsight[]> => {
     try {
-      const res = await fetch('/api/insights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ blocks: this.state.blocks })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.insights && Array.isArray(data.insights)) {
-          this.state.insights = data.insights;
-          this.notify();
-          return data.insights;
-        }
+      const insights = await generateAiInsights(this.state.blocks);
+      if (insights && Array.isArray(insights) && insights.length > 0) {
+        this.state.insights = insights;
+        this.notify();
+        return insights;
       }
     } catch (e) {
       console.warn('[TelemetryStore] Failed to refresh insights:', e);
@@ -1111,6 +1198,10 @@ class TelemetryStoreManager {
     }
 
     return cells;
+  };
+
+  public get7x18HeatmapData = (): HeatmapCell[] => {
+    return this.getHeatmapMatrix();
   };
 
 }

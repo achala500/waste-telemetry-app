@@ -3,9 +3,18 @@
  * Follows Omni Master Directives: clean, modular, production-ready, 100% type safety.
  */
 
-export type BlockCategory = 'focus' | 'wasted' | 'routine' | 'neutral';
+export type BlockCategory = 'focus' | 'wasted' | 'routine' | 'neutral' | 'rest';
 
-export type EventSource = 'manual' | 'shortcut' | 'api' | 'stopwatch' | 'paired_event';
+export type EventSource = 'manual' | 'shortcut' | 'api' | 'stopwatch' | 'paired_event' | 'pomodoro' | 'exam_timer';
+
+export type SubjectTag =
+  | 'Combined Maths'
+  | 'Physics'
+  | 'Past Paper'
+  | 'Revision'
+  | 'Chemistry'
+  | 'General'
+  | 'Custom';
 
 export interface TelemetryBlock {
   id: string;
@@ -16,6 +25,7 @@ export interface TelemetryBlock {
   title?: string;    // Compatibility alias for label
   category: BlockCategory;
   tag: string;       // e.g. "Coding", "Social", "Meeting", "Gaming", "Study", "Break"
+  subject?: SubjectTag | string; // Student subject tagging
   source: EventSource | string;
   notes?: string;
   syncedToSheets?: boolean;
@@ -196,5 +206,101 @@ export interface ChangelogEntry {
     change: string;
   }[];
 }
+
+export type TimerCountdownMode = 'stopwatch' | 'pomodoro' | 'paper-2h' | 'paper-3h';
+
+export interface AuditRecord {
+  id: string;
+  timestamp: string;
+  fromStatus: string;
+  toStatus: string;
+  author: string;
+  note: string;
+}
+
+export interface FeedbackTicket {
+  id: string;
+  pageUrl: string;
+  timestamp: string;
+  userEmail?: string;
+  userName?: string;
+  category: 'bug' | 'feature' | 'ux' | 'other';
+  description: string;
+  annotatedScreenshotUrl?: string;
+  status: 'NEW' | 'AUDITED' | 'IN_PROGRESS' | 'FIXED' | 'RELEASED';
+  priority?: 'CRITICAL' | 'HIGH' | 'NORMAL';
+  classification?: 'Bug' | 'Feature' | 'Spam' | 'UX';
+  isSpam?: boolean;
+  isDuplicate?: boolean;
+  aiNotes?: string;
+  auditHistory: AuditRecord[];
+}
+
+export interface PastPaperItem {
+  id: string;
+  title: string;
+  subject: 'Combined Maths' | 'Physics' | 'Chemistry' | 'Revision' | 'Other';
+  year: number;
+  examType: 'A/L National' | 'Provincial' | 'Model Paper' | 'Marking Scheme';
+  driveFileId?: string;
+  downloadUrl: string;
+  previewUrl?: string;
+  fileSizeBytes?: number;
+  uploaderEmail?: string;
+  uploaderName?: string;
+  status: 'approved' | 'quarantined' | 'rejected';
+  uploadedAt: string;
+  rejectionReason?: string;
+}
+
+export interface ForumPostReply {
+  id: string;
+  authorEmail: string;
+  authorName: string;
+  content: string;
+  timestamp: string;
+}
+
+export interface ForumPost {
+  id: string;
+  paperId?: string;
+  paperTitle?: string;
+  authorEmail: string;
+  authorName: string;
+  subject: string;
+  title: string;
+  content: string;
+  timestamp: string;
+  likes: number;
+  replies: ForumPostReply[];
+}
+
+/**
+ * Local timezone formatters
+ */
+export function formatLocalTime(isoOrTime: string): string {
+  if (!isoOrTime) return '--:--';
+  if (!isoOrTime.includes('T') && isoOrTime.includes(':')) {
+    return isoOrTime.slice(0, 5);
+  }
+  const d = new Date(isoOrTime);
+  if (isNaN(d.getTime())) return isoOrTime;
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+export function getLocalDateString(isoOrDate: string): string {
+  if (!isoOrDate) return '';
+  const d = new Date(isoOrDate);
+  if (isNaN(d.getTime())) {
+    return isoOrDate.split('T')[0];
+  }
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 
 

@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Check, MessageSquare, PenTool, Square, Type, Undo, X, ArrowUpRight } from 'lucide-react';
+import { submitFeedbackTicket } from '@/lib/feedbackService';
+import { useTelemetryStore } from '@/lib/telemetryStore';
 
 interface FeedbackModalProps {
   isOpen: boolean;
@@ -164,6 +166,8 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
     }
   };
 
+  const storeState = useTelemetryStore();
+
   const handleSubmit = async () => {
     if (!description.trim()) return;
     setIsSubmitting(true);
@@ -172,11 +176,20 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
       finalScreenshotUrl = canvasRef.current.toDataURL('image/png');
     }
 
-    await onSubmit({
-      category,
-      description,
-      annotatedScreenshotUrl: finalScreenshotUrl
-    });
+    try {
+      await submitFeedbackTicket({
+        category,
+        description,
+        annotatedScreenshotUrl: finalScreenshotUrl,
+        userEmail: storeState.user?.email,
+        userName: storeState.user?.displayName
+      });
+      await onSubmit({
+        category,
+        description,
+        annotatedScreenshotUrl: finalScreenshotUrl
+      });
+    } catch {}
 
     setIsSubmitting(false);
     setSubmitted(true);
@@ -199,7 +212,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
             </div>
             <div>
               <h2 className="text-lg font-semibold text-white">Share Visual Feedback</h2>
-              <p className="text-xs text-zinc-400">Captured and triaged directly by our nightly Swarm system</p>
+              <p className="text-xs text-zinc-400">Captured and triaged directly for our next release</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white rounded-lg hover:bg-white/5">
@@ -337,7 +350,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
               >
                 <Camera className="w-8 h-8 text-zinc-500 mx-auto mb-2" />
                 <p className="text-xs text-zinc-400">Click to capture current UI view or annotate a screenshot</p>
-                <p className="text-[10px] text-zinc-600 mt-1">Helps the Swarm visualize exactly what needs fixing</p>
+                <p className="text-[10px] text-zinc-600 mt-1">Visual screenshots help us reproduce and resolve UI friction</p>
               </div>
             )}
           </div>
@@ -345,7 +358,7 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
 
         {/* Footer */}
         <div className="pt-4 border-t border-white/10 flex items-center justify-between">
-          <span className="text-xs text-zinc-500">Auto-saved to User_Feedback tab</span>
+          <span className="text-xs text-zinc-500">Secure feedback submission & auto-audit</span>
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
