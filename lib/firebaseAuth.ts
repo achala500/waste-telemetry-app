@@ -12,9 +12,9 @@ import {
   onAuthStateChanged,
   User
 } from 'firebase/auth';
-import { UserProfile } from './types';
+import { UserProfile, VERIFIED_ADMIN_EMAILS } from './types';
 import { telemetryStore } from './telemetryStore';
-import { syncUserProfileToFirestore } from './firestoreSync';
+import { syncUserProfileToFirestore, fetchUserProfileFromFirestore } from './firestoreSync';
 
 const firebaseConfig = {
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'omnitv-live-streaming',
@@ -45,33 +45,25 @@ export function firebaseUserToProfile(user: User, customDailyGoalHours = 5): Use
 }
 
 /**
- * Sign in as Verified Owner (Achala) - Instant guarantee, zero lockout risk
- */
-export async function signInAsOwner(): Promise<UserProfile> {
-  const ownerProfile: UserProfile = {
-    userId: 'usr_achala_owner',
-    email: 'achala500@gmail.com',
-    displayName: 'Achala (Owner)',
-    dailyGoalHours: 5,
-    createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString()
-  };
-  telemetryStore.setUser(ownerProfile);
-  try {
-    await syncUserProfileToFirestore(ownerProfile);
-  } catch (e) {
-    console.warn('[FirebaseAuth] Error syncing owner profile to Firestore:', e);
-  }
-  return ownerProfile;
-}
-
-/**
- * Sign in with Google Popup - Real Google Authentication with graceful configuration fallback
+ * Sign in with Google Popup - Real Google Authentication
  */
 export async function signInWithGoogle(): Promise<{ success: boolean; user: UserProfile | null; error?: string }> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    const profile = firebaseUserToProfile(result.user);
+    const existing = await fetchUserProfileFromFirestore(result.user.uid);
+    let profile = firebaseUserToProfile(result.user);
+    if (existing.user) {
+      profile = {
+        ...profile,
+        username: existing.user.username,
+        school: existing.user.school,
+        province: existing.user.province,
+        stream: existing.user.stream,
+        examYear: existing.user.examYear,
+        membershipTier: existing.user.membershipTier,
+        dailyGoalHours: existing.user.dailyGoalHours || profile.dailyGoalHours
+      };
+    }
     telemetryStore.setUser(profile);
     syncUserProfileToFirestore(profile).catch((e) =>
       console.warn('[FirebaseAuth] Background syncUserProfileToFirestore failed:', e)
@@ -79,15 +71,6 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user: User
     return { success: true, user: profile };
   } catch (error: any) {
     console.warn('[FirebaseAuth] Google sign-in cancelled or failed:', error?.message);
-    const code = error?.code || '';
-    const message = error?.message || '';
-
-    // Gracefully handle auth/configuration-not-found: authenticate seamless owner profile & write to Firestore
-    if (code === 'auth/configuration-not-found' || message.includes('configuration-not-found')) {
-      const fallbackProfile = await signInAsOwner();
-      return { success: true, user: fallbackProfile };
-    }
-
     return {
       success: false,
       user: null,
@@ -127,11 +110,12 @@ export async function signInWithEmail(email: string, password: string): Promise<
 
     // Gracefully handle auth/configuration-not-found: persist to local store and directly sync to Firestore 'users' collection
     if (code === 'auth/configuration-not-found' || message.includes('configuration-not-found') || code === 'auth/operation-not-allowed') {
-      const isOwnerAccount = email.trim().toLowerCase().startsWith('achala');
+      const cleanEmail = email.trim().toLowerCase();
+      const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
       const fallbackProfile: UserProfile = {
-        userId: isOwnerAccount ? 'usr_achala_owner' : generateLocalUserId(email),
-        email: email.trim(),
-        displayName: isOwnerAccount ? 'Achala (Owner)' : email.split('@')[0],
+        userId: isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email),
+        email: cleanEmail,
+        displayName: isOwnerAccount ? 'Owner' : email.split('@')[0],
         dailyGoalHours: 5,
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
@@ -176,11 +160,12 @@ export async function signUpWithEmail(
 
     // Gracefully handle auth/configuration-not-found: persist to local store and directly sync to Firestore 'users' collection
     if (code === 'auth/configuration-not-found' || message.includes('configuration-not-found') || code === 'auth/operation-not-allowed') {
-      const isOwnerAccount = email.trim().toLowerCase().startsWith('achala');
+      const cleanEmail = email.trim().toLowerCase();
+      const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
       const fallbackProfile: UserProfile = {
-        userId: isOwnerAccount ? 'usr_achala_owner' : generateLocalUserId(email),
-        email: email.trim(),
-        displayName: displayName?.trim() || (isOwnerAccount ? 'Achala (Owner)' : email.split('@')[0]),
+        userId: isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email),
+        email: cleanEmail,
+        displayName: displayName?.trim() || (isOwnerAccount ? 'Owner' : email.split('@')[0]),
         dailyGoalHours,
         createdAt: new Date().toISOString(),
         lastLoginAt: new Date().toISOString()

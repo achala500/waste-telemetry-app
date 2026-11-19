@@ -101,12 +101,14 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
                   <XAxis dataKey="day" stroke="#52525b" fontSize={11} tickLine={false} axisLine={false} />
                   <YAxis stroke="#52525b" fontSize={11} tickLine={false} axisLine={false} unit="h" />
                   <Tooltip
+                    cursor={false}
                     contentStyle={{
                       backgroundColor: '#18181b',
                       borderColor: '#27272a',
                       borderRadius: '16px',
                       fontSize: '12px',
-                      color: '#fff'
+                      color: '#fff',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.7)'
                     }}
                   />
                   <Bar dataKey="focus" fill="#A3E635" radius={[6, 6, 0, 0]} name="Focus (h)" />

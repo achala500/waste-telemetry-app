@@ -21,10 +21,17 @@ import {
   CheckCircle2,
   Lock,
   Search,
-  Filter
+  Filter,
+  Users,
+  UserCheck,
+  UserX,
+  Crown,
+  GraduationCap,
+  School,
+  MapPin
 } from 'lucide-react';
 import { NavigationRail } from '@/components/NavigationRail';
-import { FeedbackTicket, PastPaperItem, AuditRecord } from '@/lib/types';
+import { FeedbackTicket, PastPaperItem, AuditRecord, UserProfile } from '@/lib/types';
 import {
   fetchAllFeedbackTickets,
   updateFeedbackTicketStatus,
@@ -39,23 +46,36 @@ import {
   banUserUploader,
   isUserBanned
 } from '@/lib/papersService';
+import {
+  fetchAllUsersFromFirestore,
+  adminUpdateUserInFirestore,
+  adminDeleteUserFromFirestore
+} from '@/lib/firestoreSync';
+import { PaperPreviewModal } from '@/components/PaperPreviewModal';
 import { useTelemetryStore } from '@/lib/telemetryStore';
-import { signInWithGoogle, signInAsOwner } from '@/lib/firebaseAuth';
+import { signInWithGoogle } from '@/lib/firebaseAuth';
 
 const OWNER_EMAILS = [
+  'aimssssff@gmail.com',
+  'alwisachalaanurada@gmail.com',
   'achala500@gmail.com',
-  'achala500',
   '111077537+achala500@users.noreply.github.com'
 ];
 
 export default function AdminPage() {
   const storeState = useTelemetryStore();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeTab, setActiveTab] = useState<'feedback' | 'audit' | 'release' | 'papers'>('feedback');
+  const [activeTab, setActiveTab] = useState<'feedback' | 'audit' | 'release' | 'papers' | 'users'>('feedback');
 
   // Loading & Error States
   const [loadingData, setLoadingData] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
+
+  // Users Directory & Control State
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [userTierFilter, setUserTierFilter] = useState<'all' | 'starter' | 'pro' | 'master'>('all');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'banned'>('all');
 
   // Feedback State
   const [tickets, setTickets] = useState<FeedbackTicket[]>([]);
@@ -89,10 +109,7 @@ export default function AdminPage() {
   const envAdminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim();
   const isOwner = Boolean(
     currentUserEmail &&
-      (OWNER_EMAILS.includes(currentUserEmail) ||
-        currentUserEmail === envAdminEmail ||
-        currentUserEmail.startsWith('achala') ||
-        currentUserEmail.includes('achala500'))
+      (OWNER_EMAILS.includes(currentUserEmail) || currentUserEmail === envAdminEmail)
   );
 
   useEffect(() => {
@@ -108,12 +125,16 @@ export default function AdminPage() {
     setLoadingData(true);
     setQueryError(null);
     try {
-      const fb = await fetchAllFeedbackTickets();
+      const [fb, qp, pub, usrList] = await Promise.all([
+        fetchAllFeedbackTickets(),
+        getQuarantinedPapers(),
+        getApprovedPastPapers(),
+        fetchAllUsersFromFirestore()
+      ]);
       setTickets(fb);
-      const qp = await getQuarantinedPapers();
       setQuarantinedPapers(qp);
-      const pub = await getApprovedPastPapers();
       setPublishedPapers(pub);
+      setUsers(usrList);
     } catch (err: any) {
       setQueryError(err?.message || 'Failed to load records from Firestore.');
     } finally {
@@ -121,13 +142,35 @@ export default function AdminPage() {
     }
   };
 
-  const handleInstantOwnerSignIn = async () => {
-    try {
-      await signInAsOwner();
-      setIsAuthenticated(true);
-      await loadAdminData();
-    } catch (e: any) {
-      showToast('Signed in with Owner credentials.');
+  const handleToggleUserBan = async (user: UserProfile) => {
+    const newBannedState = !user.isBanned;
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? { ...u, isBanned: newBannedState } : u))
+    );
+    showToast(`User "${user.displayName || user.email}" is now ${newBannedState ? 'BANNED' : 'UNBANNED'}.`);
+    await adminUpdateUserInFirestore(user.userId, { isBanned: newBannedState });
+    const fresh = await fetchAllUsersFromFirestore();
+    setUsers(fresh);
+  };
+
+  const handleToggleUserTier = async (user: UserProfile) => {
+    const newTier: 'starter' | 'pro' | 'master' = user.membershipTier === 'pro' ? 'starter' : 'pro';
+    setUsers((prev) =>
+      prev.map((u) => (u.userId === user.userId ? { ...u, membershipTier: newTier } : u))
+    );
+    showToast(`User "${user.displayName || user.email}" tier set to ${newTier.toUpperCase()}.`);
+    await adminUpdateUserInFirestore(user.userId, { membershipTier: newTier });
+    const fresh = await fetchAllUsersFromFirestore();
+    setUsers(fresh);
+  };
+
+  const handleDeleteUserRecord = async (user: UserProfile) => {
+    if (confirm(`Permanently delete account for "${user.displayName || user.email}" from Firestore?`)) {
+      setUsers((prev) => prev.filter((u) => u.userId !== user.userId));
+      showToast(`User account deleted.`);
+      await adminDeleteUserFromFirestore(user.userId);
+      const fresh = await fetchAllUsersFromFirestore();
+      setUsers(fresh);
     }
   };
 
@@ -248,13 +291,6 @@ export default function AdminPage() {
               >
                 Switch to Owner Google Account
               </button>
-              <button
-                onClick={handleInstantOwnerSignIn}
-                className="w-full py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Shield className="w-4 h-4 text-amber-400" />
-                <span>Instant Sign In as Achala (Owner)</span>
-              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -269,13 +305,6 @@ export default function AdminPage() {
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
                 <span>Sign in with Google</span>
-              </button>
-              <button
-                onClick={handleInstantOwnerSignIn}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-semibold text-xs transition-all shadow-md active:scale-95"
-              >
-                <Shield className="w-4 h-4 text-amber-400" />
-                <span>Sign In as Achala (Owner - Instant Access)</span>
               </button>
             </div>
           )}
@@ -405,6 +434,18 @@ export default function AdminPage() {
             >
               <Shield className="w-3.5 h-3.5" />
               <span>Pending Papers ({quarantinedPapers.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('users')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-semibold transition-all ${
+                activeTab === 'users'
+                  ? 'bg-[#A3E635] text-black shadow-md'
+                  : 'bg-white/5 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Student Directory & Control ({users.length})</span>
             </button>
           </div>
 
@@ -869,6 +910,220 @@ export default function AdminPage() {
                   })()}
                 </div>
               )}
+
+              {/* TAB 5: STUDENT DIRECTORY & ADMIN CONTROLS */}
+              {activeTab === 'users' && (
+                <div className="space-y-6">
+                  {/* Metric Summary */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 space-y-1">
+                      <span className="text-[11px] font-mono text-zinc-400">Total Registered</span>
+                      <p className="text-xl font-bold text-white tabular-nums">{users.length}</p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 space-y-1">
+                      <span className="text-[11px] font-mono text-amber-400">Pro Subscribers</span>
+                      <p className="text-xl font-bold text-amber-300 tabular-nums">
+                        {users.filter((u) => u.membershipTier === 'pro').length}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 space-y-1">
+                      <span className="text-[11px] font-mono text-rose-400">Suspended / Banned</span>
+                      <p className="text-xl font-bold text-rose-300 tabular-nums">
+                        {users.filter((u) => u.isBanned).length}
+                      </p>
+                    </div>
+                    <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 space-y-1">
+                      <span className="text-[11px] font-mono text-[#A3E635]">Verified Admins</span>
+                      <p className="text-xl font-bold text-[#A3E635] tabular-nums">{OWNER_EMAILS.length}</p>
+                    </div>
+                  </div>
+
+                  {/* Filter & Search Bar */}
+                  <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="relative w-full sm:w-80">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        value={userSearch}
+                        onChange={(e) => setUserSearch(e.target.value)}
+                        placeholder="Search student, @username, email, or school..."
+                        className="w-full bg-[#08080A] border border-white/10 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635]"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <select
+                        value={userTierFilter}
+                        onChange={(e) => setUserTierFilter(e.target.value as any)}
+                        className="bg-[#08080A] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                      >
+                        <option value="all">All Tiers</option>
+                        <option value="starter">Starter Students</option>
+                        <option value="pro">Pro Students</option>
+                        <option value="master">Master Cohort</option>
+                      </select>
+
+                      <select
+                        value={userStatusFilter}
+                        onChange={(e) => setUserStatusFilter(e.target.value as any)}
+                        className="bg-[#08080A] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                      >
+                        <option value="all">All Statuses</option>
+                        <option value="active">Active Only</option>
+                        <option value="banned">Banned Only</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Users Table */}
+                  <div className="bg-[#141416] border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                    {(() => {
+                      const filtered = users.filter((u) => {
+                        const q = userSearch.toLowerCase();
+                        const matchesQuery =
+                          (u.displayName || '').toLowerCase().includes(q) ||
+                          (u.email || '').toLowerCase().includes(q) ||
+                          (u.username || '').toLowerCase().includes(q) ||
+                          (u.school || '').toLowerCase().includes(q) ||
+                          (u.province || '').toLowerCase().includes(q);
+                        const matchesTier = userTierFilter === 'all' || u.membershipTier === userTierFilter;
+                        const matchesStatus =
+                          userStatusFilter === 'all' ||
+                          (userStatusFilter === 'banned' ? u.isBanned : !u.isBanned);
+                        return matchesQuery && matchesTier && matchesStatus;
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="py-16 text-center space-y-2">
+                            <Users className="w-8 h-8 text-zinc-600 mx-auto" />
+                            <p className="text-xs text-zinc-400">No student profiles match the filter criteria.</p>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="border-b border-white/10 bg-[#0C0C0E] text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+                                <th className="py-3.5 px-5">Student Identity</th>
+                                <th className="py-3.5 px-5">School & Province</th>
+                                <th className="py-3.5 px-5">Stream / Exam</th>
+                                <th className="py-3.5 px-5 text-right">Study Time</th>
+                                <th className="py-3.5 px-5 text-center">Tier</th>
+                                <th className="py-3.5 px-5 text-center">Status</th>
+                                <th className="py-3.5 px-5 text-right">Admin Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 text-xs">
+                              {filtered.map((u) => (
+                                <tr key={u.userId} className="hover:bg-white/[0.02] transition-colors">
+                                  {/* Identity */}
+                                  <td className="py-3.5 px-5">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center font-bold text-white text-xs shrink-0">
+                                        {(u.displayName || u.email || 'S').charAt(0)}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="font-bold text-white flex items-center gap-1.5 truncate">
+                                          <span>{u.displayName || 'Student'}</span>
+                                          {u.username && (
+                                            <span className="text-[11px] text-[#A3E635] font-mono">@{u.username}</span>
+                                          )}
+                                        </div>
+                                        <span className="text-[11px] text-zinc-400 font-mono truncate block">{u.email}</span>
+                                      </div>
+                                    </div>
+                                  </td>
+
+                                  {/* School & Province */}
+                                  <td className="py-3.5 px-5">
+                                    <p className="text-white font-medium text-xs truncate max-w-[200px]">
+                                      {u.school || 'Private Candidate'}
+                                    </p>
+                                    <span className="text-[10px] text-zinc-500 block truncate">{u.province || '—'}</span>
+                                  </td>
+
+                                  {/* Stream / Exam */}
+                                  <td className="py-3.5 px-5">
+                                    <span className="text-zinc-300 block truncate max-w-[160px]">{u.stream || 'A/L'}</span>
+                                    {u.examYear && <span className="text-[10px] text-zinc-500 font-mono">{u.examYear} A/L</span>}
+                                  </td>
+
+                                  {/* Study Time */}
+                                  <td className="py-3.5 px-5 text-right">
+                                    <span className="font-extrabold text-white tabular-nums">
+                                      {Math.round((u.totalFocusMinutes || 0) / 60)}h
+                                    </span>
+                                    <span className="text-[10px] text-zinc-500 block">{(u.totalFocusMinutes || 0)}m</span>
+                                  </td>
+
+                                  {/* Tier */}
+                                  <td className="py-3.5 px-5 text-center">
+                                    {u.membershipTier === 'pro' ? (
+                                      <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
+                                        PRO
+                                      </span>
+                                    ) : (
+                                      <span className="text-zinc-500 text-[11px]">Free</span>
+                                    )}
+                                  </td>
+
+                                  {/* Status */}
+                                  <td className="py-3.5 px-5 text-center">
+                                    {u.isBanned ? (
+                                      <span className="px-2 py-0.5 rounded-full bg-rose-500/20 border border-rose-500/30 text-rose-300 text-[10px] font-bold">
+                                        BANNED
+                                      </span>
+                                    ) : (
+                                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold">
+                                        ACTIVE
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  {/* Admin Actions */}
+                                  <td className="py-3.5 px-5 text-right">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        onClick={() => handleToggleUserTier(u)}
+                                        className="px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[11px] font-semibold transition-all"
+                                        title={u.membershipTier === 'pro' ? 'Downgrade to Free' : 'Promote to Pro'}
+                                      >
+                                        {u.membershipTier === 'pro' ? 'Revoke Pro' : 'Make Pro'}
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleToggleUserBan(u)}
+                                        className={`px-2.5 py-1 rounded-xl text-[11px] font-semibold border transition-all ${
+                                          u.isBanned
+                                            ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300'
+                                            : 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/30 text-rose-300'
+                                        }`}
+                                      >
+                                        {u.isBanned ? 'Unban' : 'Ban'}
+                                      </button>
+
+                                      <button
+                                        onClick={() => handleDeleteUserRecord(u)}
+                                        className="p-1 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                                        title="Delete user record"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </main>
@@ -885,40 +1140,13 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* PDF In-App Preview Modal */}
-      {previewPdfPaper && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-4xl h-[85vh] bg-[#141416] border border-white/10 rounded-3xl p-6 flex flex-col justify-between space-y-4">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-sm font-bold text-white">{previewPdfPaper.title}</h3>
-              <button
-                onClick={() => setPreviewPdfPaper(null)}
-                className="p-1 rounded-lg text-zinc-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="flex-1 w-full bg-[#08080A] rounded-2xl overflow-hidden border border-white/10">
-              <iframe
-                src={previewPdfPaper.downloadUrl}
-                title={previewPdfPaper.title}
-                className="w-full h-full"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  handleApprovePaper(previewPdfPaper.id);
-                  setPreviewPdfPaper(null);
-                }}
-                className="px-4 py-2 rounded-xl bg-[#A3E635] text-black font-semibold text-xs"
-              >
-                Approve Paper
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* PDF In-App Preview Modal with Direct Drive Fallback */}
+      <PaperPreviewModal
+        paper={previewPdfPaper}
+        onClose={() => setPreviewPdfPaper(null)}
+        onApprove={handleApprovePaper}
+        isAdmin={true}
+      />
     </div>
   );
 }

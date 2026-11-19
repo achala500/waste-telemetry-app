@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { NavigationRail } from '@/components/NavigationRail';
 import { AuthModal } from '@/components/AuthModal';
+import { PaperPreviewModal } from '@/components/PaperPreviewModal';
 import { PastPaperItem, ForumPost } from '@/lib/types';
 import {
   getApprovedPastPapers,
@@ -701,49 +702,7 @@ export default function PastPapersPage() {
       </div>
 
       {/* In-App Read-Only PDF Preview Modal */}
-      {previewPaper && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in">
-          <div className="bg-[#141416] border border-white/10 rounded-3xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-[#A3E635]" />
-                <div>
-                  <h3 className="text-sm font-bold text-white">{previewPaper.title}</h3>
-                  <p className="text-xs text-zinc-400">
-                    {previewPaper.subject} • {previewPaper.year} • {previewPaper.examType} (Read-Only Preview)
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <a
-                  href={previewPaper.downloadUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs flex items-center gap-1.5"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Open Drive Folder</span>
-                </a>
-                <button
-                  onClick={() => setPreviewPaper(null)}
-                  className="p-1.5 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 bg-[#08080A] relative">
-              <iframe
-                src={`${previewPaper.previewUrl || previewPaper.downloadUrl}#toolbar=0`}
-                className="w-full h-full border-none"
-                title={previewPaper.title}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      <PaperPreviewModal paper={previewPaper} onClose={() => setPreviewPaper(null)} />
 
       {/* Safe Student Upload Modal with Forum Link */}
       {isUploadOpen && (

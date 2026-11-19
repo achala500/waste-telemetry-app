@@ -6,11 +6,63 @@ import {
   signInWithGoogle,
   signInWithEmail,
   signUpWithEmail,
-  signOutUser,
-  signInAsOwner
+  signOutUser
 } from '../lib/firebaseAuth';
 import { UserProfile } from '../lib/types';
-import { syncUserProfileToFirestore } from '../lib/firestoreSync';
+import {
+  syncUserProfileToFirestore,
+  checkUsernameAvailableInFirestore
+} from '../lib/firestoreSync';
+
+export const PROVINCES = [
+  'Western Province',
+  'Central Province',
+  'Southern Province',
+  'North Western Province',
+  'Sabaragamuwa Province',
+  'Northern Province',
+  'Eastern Province',
+  'North Central Province',
+  'Uva Province'
+];
+
+export const POPULAR_SCHOOLS = [
+  'Royal College, Colombo',
+  'Ananda College, Colombo',
+  'Nalanda College, Colombo',
+  'D.S. Senanayake College, Colombo',
+  'Visakha Vidyalaya, Colombo',
+  'Devi Balika Vidyalaya, Colombo',
+  'Sirimavo Bandaranaike Vidyalaya',
+  'Musaeus College, Colombo',
+  'St. Thomas\' College, Mount Lavinia',
+  'St. Joseph\'s College, Colombo',
+  'St. Peter\'s College, Colombo',
+  'Trinity College, Kandy',
+  'Dharmaraja College, Kandy',
+  'Kingswood College, Kandy',
+  'Mahamaya Girls\' College, Kandy',
+  'Richmond College, Galle',
+  'Mahinda College, Galle',
+  'Southlands College, Galle',
+  'Rahula College, Matara',
+  'Sujatha Vidyalaya, Matara',
+  'Maliyadeva College, Kurunegala',
+  'Holy Family Convent, Kurunegala',
+  'Jaffna Hindu College',
+  'St. Patrick\'s College, Jaffna',
+  'Bandarawela Central College',
+  'Badulla Central College',
+  'Other / Private Candidate'
+];
+
+export const STREAMS = [
+  'Physical Science (Combined Maths)',
+  'Biological Science (Biology)',
+  'Technology Stream (Engineering/Bio Tech)',
+  'Commerce Stream',
+  'Arts Stream'
+];
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -27,18 +79,51 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
   const [displayName, setDisplayName] = useState('');
   const [dailyGoalHours, setDailyGoalHours] = useState<number>(5);
 
+  // Student personalization fields
+  const [username, setUsername] = useState('');
+  const [school, setSchool] = useState('');
+  const [province, setProvince] = useState('Western Province');
+  const [stream, setStream] = useState('Physical Science (Combined Maths)');
+  const [examYear, setExamYear] = useState<number>(2025);
+
+  // Uniqueness checking state
+  const [usernameChecking, setUsernameChecking] = useState(false);
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState(false);
-  const [isSyncingProfile, setIsSyncingProfile] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Sync state goal if user exists
+  // Populate from user profile if exists
   useEffect(() => {
-    if (user?.dailyGoalHours) {
-      setDailyGoalHours(user.dailyGoalHours);
+    if (user) {
+      if (user.dailyGoalHours) setDailyGoalHours(user.dailyGoalHours);
+      if (user.username) setUsername(user.username);
+      if (user.school) setSchool(user.school);
+      if (user.province) setProvince(user.province);
+      if (user.stream) setStream(user.stream);
+      if (user.examYear) setExamYear(user.examYear);
     }
   }, [user]);
+
+  // Check username uniqueness
+  useEffect(() => {
+    if (!username.trim() || (user && username.trim().toLowerCase() === user.username?.toLowerCase())) {
+      setUsernameAvailable(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setUsernameChecking(true);
+      const isAvailable = await checkUsernameAvailableInFirestore(username.trim(), user?.userId);
+      setUsernameAvailable(isAvailable);
+      setUsernameChecking(false);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [username, user]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -60,7 +145,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     try {
       const res = await signInWithGoogle();
       if (res.success) {
-        setSuccessMsg(`Welcome, ${res.user?.displayName || 'Omni User'}!`);
+        setSuccessMsg(`Welcome, ${res.user?.displayName || 'Student'}!`);
         setTimeout(() => onClose(), 800);
       } else {
         setErrorMsg(res.error || 'Failed to sign in with Google');
@@ -81,9 +166,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
     try {
       if (authMode === 'signup') {
+        if (username.trim() && usernameAvailable === false) {
+          setErrorMsg('This username is already taken. Please choose another one.');
+          setIsLoading(false);
+          return;
+        }
+
         const res = await signUpWithEmail(email, password, displayName, dailyGoalHours);
-        if (res.success) {
-          setSuccessMsg(`Account created for ${res.user?.displayName}!`);
+        if (res.success && res.user) {
+          // Update personalization in Firestore
+          await telemetryStore.updateUserProfile({
+            username: username.trim() || undefined,
+            school: school.trim() || undefined,
+            province: province || undefined,
+            stream: stream || undefined,
+            examYear: Number(examYear) || undefined
+          });
+
+          setSuccessMsg(`Account created for ${res.user.displayName}!`);
           setTimeout(() => onClose(), 800);
         } else {
           setErrorMsg(res.error || 'Failed to create account');
@@ -105,36 +205,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleSaveProfileUpdates = async () => {
+    if (!user) return;
+    if (username.trim() && usernameAvailable === false) {
+      setErrorMsg('This username is already taken. Please pick another one.');
+      return;
+    }
+
+    setIsSavingProfile(true);
+    setErrorMsg(null);
+    try {
+      await telemetryStore.updateUserProfile({
+        username: username.trim() || undefined,
+        school: school.trim() || undefined,
+        province,
+        stream,
+        examYear: Number(examYear) || undefined,
+        dailyGoalHours
+      });
+      setSuccessMsg('Profile personalized and synchronized with Firestore & Leaderboard!');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update profile');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const handleSignOut = async () => {
     setIsLoading(true);
     await signOutUser();
     setIsLoading(false);
     setSuccessMsg('Successfully signed out.');
-  };
-
-  const handleGoalChange = async (newHours: number) => {
-    const clamped = Math.max(1, Math.min(16, newHours));
-    setDailyGoalHours(clamped);
-    if (user) {
-      await telemetryStore.updateUserProfile({ dailyGoalHours: clamped });
-    } else {
-      telemetryStore.setFocusGoal(clamped * 60);
-    }
-  };
-
-  const handleSyncProfile = async () => {
-    if (!user) return;
-    setIsSyncingProfile(true);
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    const res = await telemetryStore.syncUserProfile(user);
-    setIsSyncingProfile(false);
-    if (res.success) {
-      setSuccessMsg('User profile synchronized with Google Sheets & Firestore!');
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } else {
-      setErrorMsg(res.error || 'Sync warning: credentials not yet configured in Setup Drawer');
-    }
   };
 
   const copyUserId = () => {
@@ -144,50 +246,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const handleOwnerSignIn = async () => {
-    setIsLoading(true);
-    setErrorMsg(null);
-    try {
-      const owner = await signInAsOwner();
-      setSuccessMsg(`Signed in as ${owner.displayName}`);
-      setTimeout(() => onClose(), 600);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setErrorMsg(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleStudentSignIn = handleOwnerSignIn;
-
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/80 backdrop-blur-xl animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/85 backdrop-blur-xl animate-in fade-in duration-200"
     >
       {/* Backdrop Click Dismiss */}
       <div className="fixed inset-0" onClick={onClose} aria-hidden="true" />
 
       {/* Obsidian Frosted Bento Dialog Canvas */}
-      <div className="relative w-full max-w-md rounded-2xl bg-[#0D0D0F]/95 border border-white/[0.1] shadow-2xl shadow-black/80 overflow-hidden z-10 backdrop-blur-2xl spring-popover">
-        
+      <div className="relative w-full max-w-lg rounded-3xl bg-[#0D0D0F]/95 border border-white/10 shadow-2xl shadow-black/90 overflow-hidden z-10 backdrop-blur-2xl">
         {/* Glowing Top Accent Line */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-[#A3E635] to-transparent opacity-80" />
 
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#A3E635]/15 border border-[#A3E635]/30 flex items-center justify-center text-[#A3E635] shadow-[0_0_12px_rgba(163,230,53,0.25)]">
+            <div className="w-9 h-9 rounded-2xl bg-[#A3E635]/15 border border-[#A3E635]/30 flex items-center justify-center text-[#A3E635] shadow-[0_0_12px_rgba(163,230,53,0.25)]">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </div>
             <div>
-              <h2 id="auth-modal-title" className="text-base font-semibold text-white tracking-tight">
-                {user ? 'Account & Profile' : 'Sign in to Chrono'}
+              <h2 id="auth-modal-title" className="text-base font-bold text-white tracking-tight">
+                {user ? 'Student Identity & Settings' : 'Sign in to Chrono'}
               </h2>
               <p className="text-xs text-zinc-400 font-mono">
                 {user ? user.email : 'Unified telemetry across all Apple devices'}
@@ -208,205 +292,189 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
         {/* Notifications Banners */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs space-y-2.5">
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="flex-1 font-medium">{errorMsg}</span>
-            </div>
-            {errorMsg.includes('configuration-not-found') && (
-              <div className="pt-2 border-t border-rose-500/20 space-y-2">
-                <p className="text-[11px] text-zinc-300">
-                  Firebase Authentication service configuration in progress. Continue with instant direct Firestore sync:
-                </p>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <button
-                    type="button"
-                    onClick={handleOwnerSignIn}
-                    className="flex-1 py-2 px-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold text-xs hover:bg-amber-500/30 active:scale-95 transition-all shadow-md flex items-center justify-center gap-1.5"
-                  >
-                    <span>⚡ Sign In as Achala (Owner)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const isOwner = email.toLowerCase().includes('achala') || !email;
-                      const localUser: UserProfile = {
-                        userId: isOwner ? 'usr_achala_owner' : 'usr_local_' + Date.now(),
-                        email: (email.trim() || 'achala500@gmail.com'),
-                        displayName: (displayName.trim() || (isOwner ? 'Achala (Owner)' : email.split('@')[0])),
-                        dailyGoalHours: dailyGoalHours || 5,
-                        createdAt: new Date().toISOString(),
-                        lastLoginAt: new Date().toISOString()
-                      };
-                      telemetryStore.setUser(localUser);
-                      await syncUserProfileToFirestore(localUser).catch(() => {});
-                      setSuccessMsg(`Signed in as ${localUser.displayName}!`);
-                      setErrorMsg(null);
-                      setTimeout(() => onClose(), 600);
-                    }}
-                    className="flex-1 py-2 px-3 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md"
-                  >
-                    <span>Continue as {email.trim() || 'Achala'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="mx-6 mt-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+            <svg className="w-4 h-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="flex-1 font-medium">{errorMsg}</span>
           </div>
         )}
 
         {successMsg && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-[#A3E635]/10 border border-[#A3E635]/20 text-[#A3E635] text-xs flex items-center gap-2">
+          <div className="mx-6 mt-4 p-3.5 rounded-xl bg-[#A3E635]/10 border border-[#A3E635]/20 text-[#A3E635] text-xs flex items-center gap-2">
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
             </svg>
-            <span className="flex-1">{successMsg}</span>
+            <span className="flex-1 font-medium">{successMsg}</span>
           </div>
         )}
 
-        {/* =========================================================================
-            PROFILE MODE (WHEN LOGGED IN)
-           ========================================================================= */}
+        {/* MODAL BODY */}
         {user ? (
-          <div className="p-6 space-y-5">
-            {/* User Bento Card */}
-            <div className="p-4 rounded-xl bg-[#141416]/90 border border-white/[0.08] flex items-center gap-4 shadow-inner">
+          /* =========================================================================
+             PROFILE EDITING & IDENTITY PERSONALIZATION
+             ========================================================================= */
+          <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+            {/* User Bento Header Card */}
+            <div className="p-4 rounded-2xl bg-[#141416] border border-white/10 flex items-center gap-4">
               {user.avatarUrl ? (
                 <img
                   src={user.avatarUrl}
                   alt={user.displayName}
-                  className="w-14 h-14 rounded-full object-cover border-2 border-[#A3E635]/40 shadow-lg shadow-[#A3E635]/10"
+                  className="w-14 h-14 rounded-full object-cover border-2 border-[#A3E635]/40"
                 />
               ) : (
-                <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#A3E635]/30 to-[#38BDF8]/30 border-2 border-[#A3E635]/50 flex items-center justify-center text-lg font-bold text-white shadow-lg shadow-[#A3E635]/15">
-                  {user.displayName?.charAt(0).toUpperCase() || 'U'}
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#A3E635]/30 to-[#38BDF8]/30 border-2 border-[#A3E635]/50 flex items-center justify-center text-lg font-bold text-white shadow-lg">
+                  {user.displayName?.charAt(0).toUpperCase() || 'S'}
                 </div>
               )}
 
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold text-white truncate">{user.displayName}</h3>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-[#A3E635] bg-[#A3E635]/10 border border-[#A3E635]/20">
-                    Active
+                  <h3 className="text-sm font-bold text-white truncate">{user.displayName}</h3>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold text-[#A3E635] bg-[#A3E635]/10 border border-[#A3E635]/20 uppercase">
+                    {user.membershipTier || 'Free'}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 font-mono truncate">{user.email}</p>
-                
-                {/* User ID with Copy */}
                 <div className="mt-1 flex items-center gap-1.5 text-[11px] font-mono text-zinc-500">
-                  <span>ID: {user.userId.slice(0, 14)}...</span>
-                  <button
-                    onClick={copyUserId}
-                    className="hover:text-zinc-300 transition-colors"
-                    title="Copy full User ID"
-                  >
-                    {copiedId ? (
-                      <span className="text-[#A3E635] text-[10px]">Copied!</span>
-                    ) : (
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    )}
+                  <span>ID: {user.userId.slice(0, 12)}...</span>
+                  <button onClick={copyUserId} className="hover:text-zinc-300">
+                    {copiedId ? <span className="text-[#A3E635]">Copied!</span> : <span>(copy)</span>}
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Daily Focus Goal Stepper Card */}
-            <div className="p-4 rounded-xl bg-[#141416]/60 border border-white/[0.06] space-y-3">
-              <div className="flex items-center justify-between">
+            {/* Personalization Fields */}
+            <div className="p-4 rounded-2xl bg-[#141416]/70 border border-white/5 space-y-3.5">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Student Profile & Leaderboard Identity
+              </h4>
+
+              {/* Unique Username */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] text-zinc-400 font-medium">Custom Username (@tag):</label>
+                  {usernameChecking ? (
+                    <span className="text-[10px] text-zinc-400 animate-pulse">Checking availability...</span>
+                  ) : usernameAvailable === true ? (
+                    <span className="text-[10px] text-[#A3E635] font-semibold">✓ Username Available</span>
+                  ) : usernameAvailable === false ? (
+                    <span className="text-[10px] text-rose-400 font-semibold">✗ Taken by another student</span>
+                  ) : null}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3 top-2.5 text-xs text-zinc-500">@</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                    placeholder="achala_alwis"
+                    className="w-full bg-[#08080A] border border-white/10 rounded-xl pl-7 pr-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                  />
+                </div>
+              </div>
+
+              {/* School selection */}
+              <div>
+                <label className="text-[11px] text-zinc-400 font-medium block mb-1">School / Institute:</label>
+                <select
+                  value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                >
+                  <option value="">Select your school...</option>
+                  {POPULAR_SCHOOLS.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Province and Stream Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <span className="text-xs font-medium text-zinc-200">Daily Focus Target</span>
-                  <p className="text-[11px] text-zinc-500">Target hours for Deep Work capsules</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-lg font-bold font-mono text-[#A3E635]">{dailyGoalHours}h</span>
-                  <span className="text-[10px] text-zinc-400 font-mono ml-1">({dailyGoalHours * 60}m)</span>
-                </div>
-              </div>
-
-              {/* Quick Stepper Buttons */}
-              <div className="grid grid-cols-5 gap-1.5">
-                {[4, 5, 6, 7, 8].map((hours) => (
-                  <button
-                    key={hours}
-                    type="button"
-                    onClick={() => handleGoalChange(hours)}
-                    className={`py-1.5 rounded-lg text-xs font-mono transition-all ${
-                      dailyGoalHours === hours
-                        ? 'bg-[#A3E635] text-black font-semibold shadow-sm'
-                        : 'bg-white/[0.04] text-zinc-400 hover:text-white hover:bg-white/[0.08]'
-                    }`}
+                  <label className="text-[11px] text-zinc-400 font-medium block mb-1">Province:</label>
+                  <select
+                    value={province}
+                    onChange={(e) => setProvince(e.target.value)}
+                    className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
                   >
-                    {hours}h
-                  </button>
-                ))}
-              </div>
-            </div>
+                    {PROVINCES.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
 
-            {/* Telemetry Multi-Cloud Sync Status */}
-            <div className="p-3 rounded-xl bg-[#141416]/40 border border-white/[0.05] space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-400 font-mono flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#A3E635]" />
-                  Firestore Users Collection
-                </span>
-                <span className="font-mono text-[11px] text-[#A3E635]">Synced</span>
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-medium block mb-1">A/L Stream:</label>
+                  <select
+                    value={stream}
+                    onChange={(e) => setStream(e.target.value)}
+                    className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                  >
+                    {STREAMS.map((st) => (
+                      <option key={st} value={st}>{st}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-zinc-400 font-mono flex items-center gap-1.5">
-                  <span className={`w-1.5 h-1.5 rounded-full ${state.sheetConfig.isConnected ? 'bg-[#A3E635]' : 'bg-zinc-600'}`} />
-                  Google Sheets Users Tab
-                </span>
-                <span className="font-mono text-[11px] text-zinc-400">
-                  {state.sheetConfig.isConnected ? 'Connected' : 'Offline / Setup Ready'}
-                </span>
-              </div>
-            </div>
 
-            {/* Actions: Sync Profile & Sign Out */}
-            <div className="flex items-center gap-2 pt-2">
+              {/* Exam Year & Daily Target */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-medium block mb-1">Target Exam Year:</label>
+                  <select
+                    value={examYear}
+                    onChange={(e) => setExamYear(Number(e.target.value))}
+                    className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                  >
+                    {[2025, 2026, 2027, 2028].map((yr) => (
+                      <option key={yr} value={yr}>{yr} A/L</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-zinc-400 font-medium block mb-1">Daily Focus Goal:</label>
+                  <select
+                    value={dailyGoalHours}
+                    onChange={(e) => setDailyGoalHours(Number(e.target.value))}
+                    className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#A3E635]"
+                  >
+                    {[3, 4, 5, 6, 7, 8, 10].map((h) => (
+                      <option key={h} value={h}>{h} hours/day</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Save Profile Button */}
               <button
                 type="button"
-                onClick={handleSyncProfile}
-                disabled={isSyncingProfile}
-                className="flex-1 py-2 px-3 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-zinc-200 text-xs font-medium border border-white/[0.08] transition-all flex items-center justify-center gap-1.5 active:scale-98"
+                onClick={handleSaveProfileUpdates}
+                disabled={isSavingProfile || usernameChecking || usernameAvailable === false}
+                className="w-full mt-2 py-2.5 px-4 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md disabled:opacity-40"
               >
-                {isSyncingProfile ? (
-                  <>
-                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    <span>Syncing...</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-3.5 h-3.5 text-[#A3E635]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span>Sync Profile</span>
-                  </>
-                )}
+                {isSavingProfile ? 'Saving to Cloud...' : 'Save Profile & Update Leaderboard'}
               </button>
+            </div>
 
+            {/* Actions: Sign Out */}
+            <div className="flex items-center justify-end pt-2">
               <button
                 type="button"
                 onClick={handleSignOut}
                 disabled={isLoading}
-                className="py-2 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition-all flex items-center gap-1.5 active:scale-98"
+                className="py-2 px-4 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-semibold border border-rose-500/20 transition-all flex items-center gap-1.5 active:scale-98"
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                <span>Sign Out</span>
+                <span>Sign Out of Account</span>
               </button>
             </div>
           </div>
         ) : (
           /* =========================================================================
-             AUTHENTICATION FORM MODE (SIGN IN / SIGN UP)
+             AUTHENTICATION FORM MODE (SIGN IN / SIGN UP) - STRICTLY VERIFIED
              ========================================================================= */
           <div className="p-6 space-y-5">
             {/* Mode Switcher Tabs */}
@@ -414,7 +482,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={() => { setAuthMode('signin'); setErrorMsg(null); }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   authMode === 'signin'
                     ? 'bg-white/10 text-white shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
@@ -425,7 +493,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <button
                 type="button"
                 onClick={() => { setAuthMode('signup'); setErrorMsg(null); }}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                   authMode === 'signup'
                     ? 'bg-white/10 text-white shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
@@ -463,20 +531,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <span>Continue with Google</span>
             </button>
 
-            {/* Dedicated Owner Instant Sign In Button */}
-            <button
-              type="button"
-              onClick={handleOwnerSignIn}
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-semibold text-xs transition-all shadow-md flex items-center justify-center gap-2 active:scale-98"
-            >
-              <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <span>Sign In as Achala (Owner)</span>
-            </button>
-
-            {/* Obsidian Divider */}
+            {/* Divider */}
             <div className="flex items-center gap-3">
               <div className="flex-1 h-[1px] bg-white/[0.08]" />
               <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500">or with email</span>
@@ -486,17 +541,30 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             {/* Email / Password Form */}
             <form onSubmit={handleEmailAuth} className="space-y-3.5">
               {authMode === 'signup' && (
-                <div>
-                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">Display Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="e.g. Elena Rostova"
-                    className="w-full px-3 py-2 rounded-xl bg-[#141416] border border-white/[0.08] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Display Name</label>
+                    <input
+                      type="text"
+                      required
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      placeholder="e.g. Achala Alwis"
+                      className="w-full px-3 py-2 rounded-xl bg-[#141416] border border-white/[0.08] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-mono text-zinc-400 mb-1">Username (@tag):</label>
+                    <input
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
+                      placeholder="e.g. achala_phys"
+                      className="w-full px-3 py-2 rounded-xl bg-[#141416] border border-white/[0.08] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
+                    />
+                  </div>
+                </>
               )}
 
               <div>
@@ -506,7 +574,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="name@school.edu"
                   className="w-full px-3 py-2 rounded-xl bg-[#141416] border border-white/[0.08] text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
                 />
               </div>
@@ -524,58 +592,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                 />
               </div>
 
-              {authMode === 'signup' && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-mono text-zinc-400">Daily Focus Goal</label>
-                    <span className="text-xs font-mono text-[#A3E635] font-semibold">{dailyGoalHours} hours/day</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={2}
-                    max={12}
-                    step={1}
-                    value={dailyGoalHours}
-                    onChange={(e) => setDailyGoalHours(Number(e.target.value))}
-                    className="w-full accent-[#A3E635] bg-zinc-800 rounded-lg cursor-pointer h-1.5"
-                  />
-                </div>
-              )}
-
               {/* Submit Button */}
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#A3E635] to-[#84cc16] text-[#08080A] font-semibold text-xs hover:brightness-110 active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#A3E635]/15"
+                className="w-full mt-2 py-2.5 px-4 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-98 transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-40"
               >
                 {isLoading ? (
-                  <>
-                    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                    <span>Authenticating...</span>
-                  </>
+                  <span>Authenticating...</span>
                 ) : (
-                  <span>{authMode === 'signin' ? 'Sign In' : 'Create Free Account'}</span>
+                  <span>{authMode === 'signin' ? 'Sign In' : 'Create Student Account'}</span>
                 )}
               </button>
             </form>
-
-            {/* Instant Student Sign-In */}
-            <div className="pt-2 border-t border-white/[0.05] flex items-center justify-between text-xs">
-              <span className="text-zinc-500 text-[11px]">Instant access?</span>
-              <button
-                type="button"
-                onClick={handleStudentSignIn}
-                className="text-[11px] text-[#A3E635] hover:underline flex items-center gap-1 font-semibold"
-              >
-                <span>⚡ Sign in as Achala (Instant)</span>
-              </button>
-            </div>
           </div>
         )}
-
       </div>
     </div>
   );

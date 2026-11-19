@@ -248,6 +248,14 @@ function userToFirestoreFields(user: UserProfile) {
     userId: { stringValue: user.userId },
     email: { stringValue: user.email },
     displayName: { stringValue: user.displayName },
+    username: { stringValue: user.username || user.email.split('@')[0] },
+    school: { stringValue: user.school || 'Not specified' },
+    province: { stringValue: user.province || 'Western' },
+    stream: { stringValue: user.stream || 'Physical Science' },
+    examYear: { integerValue: user.examYear || 2026 },
+    membershipTier: { stringValue: user.membershipTier || 'starter' },
+    isBanned: { booleanValue: Boolean(user.isBanned) },
+    totalFocusMinutes: { integerValue: Math.round(user.totalFocusMinutes || 0) },
     avatarUrl: { stringValue: user.avatarUrl || '' },
     dailyGoalHours: { doubleValue: Number(user.dailyGoalHours) || 5 },
     createdAt: { stringValue: user.createdAt || new Date().toISOString() },
@@ -265,7 +273,15 @@ function firestoreDocToUserProfile(doc: any): UserProfile | null {
   return {
     userId: docId,
     email: f.email?.stringValue || '',
-    displayName: f.displayName?.stringValue || 'Omni User',
+    displayName: f.displayName?.stringValue || 'Student',
+    username: f.username?.stringValue || f.email?.stringValue?.split('@')[0] || 'student',
+    school: f.school?.stringValue || 'Not specified',
+    province: f.province?.stringValue || 'Western',
+    stream: f.stream?.stringValue || 'Physical Science',
+    examYear: Number(f.examYear?.integerValue ?? 2026),
+    membershipTier: (f.membershipTier?.stringValue || 'starter') as UserProfile['membershipTier'],
+    isBanned: Boolean(f.isBanned?.booleanValue),
+    totalFocusMinutes: Number(f.totalFocusMinutes?.integerValue ?? 0),
     avatarUrl: f.avatarUrl?.stringValue || undefined,
     dailyGoalHours: Number(f.dailyGoalHours?.doubleValue ?? f.dailyGoalHours?.integerValue ?? 5),
     createdAt: f.createdAt?.stringValue || new Date().toISOString(),
@@ -336,6 +352,76 @@ export async function fetchUserProfileFromFirestore(
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };
+  }
+}
+
+/**
+ * Fetch all registered real users from Firestore
+ */
+export async function fetchAllUsersFromFirestore(
+  config: FirestoreConfig = DEFAULT_FIRESTORE_CONFIG
+): Promise<UserProfile[]> {
+  if (!config.projectId || !config.apiKey) return [];
+  const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/users?key=${config.apiKey}&pageSize=100`;
+
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    const docs = data.documents || [];
+    return docs.map(firestoreDocToUserProfile).filter((u: UserProfile | null): u is UserProfile => u !== null);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Check if a username is available
+ */
+export async function checkUsernameAvailableInFirestore(
+  username: string,
+  excludeUserId?: string,
+  config: FirestoreConfig = DEFAULT_FIRESTORE_CONFIG
+): Promise<boolean> {
+  const users = await fetchAllUsersFromFirestore(config);
+  const target = username.toLowerCase().trim().replace(/^@/, '');
+  const match = users.find(
+    (u) => (u.username || '').toLowerCase() === target && u.userId !== excludeUserId
+  );
+  return !match;
+}
+
+/**
+ * Admin: Update user properties in Firestore
+ */
+export async function adminUpdateUserInFirestore(
+  userId: string,
+  updates: Partial<UserProfile>,
+  config: FirestoreConfig = DEFAULT_FIRESTORE_CONFIG
+): Promise<boolean> {
+  const existing = await fetchUserProfileFromFirestore(userId, config);
+  if (!existing.user) return false;
+  const merged: UserProfile = { ...existing.user, ...updates, lastLoginAt: new Date().toISOString() };
+  const res = await syncUserProfileToFirestore(merged, config);
+  return res.success;
+}
+
+/**
+ * Admin: Delete a user from Firestore
+ */
+export async function adminDeleteUserFromFirestore(
+  userId: string,
+  config: FirestoreConfig = DEFAULT_FIRESTORE_CONFIG
+): Promise<boolean> {
+  if (!config.projectId || !config.apiKey) return false;
+  const cleanUserId = encodeURIComponent(userId);
+  const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/users/${cleanUserId}?key=${config.apiKey}`;
+
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 

@@ -157,12 +157,27 @@ export interface HeatmapCell {
   intensity: number;// 0 to 4
 }
 
+export const VERIFIED_ADMIN_EMAILS = [
+  'aimssssff@gmail.com',
+  'alwisachalaanurada@gmail.com',
+  'achala500@gmail.com',
+  '111077537+achala500@users.noreply.github.com'
+];
+
 export interface UserProfile {
   userId: string;
   email: string;
   displayName: string;
+  username?: string;
+  school?: string;
+  province?: string;
+  stream?: string;
+  examYear?: number;
   avatarUrl?: string;
   dailyGoalHours: number;
+  membershipTier?: 'starter' | 'pro' | 'master';
+  isBanned?: boolean;
+  totalFocusMinutes?: number;
   createdAt: string;
   lastLoginAt: string;
 }
@@ -252,10 +267,14 @@ export type ExamType =
 export interface LeaderboardEntry {
   rank: number;
   displayName: string;
+  username?: string;
+  school?: string;
+  province?: string;
   email: string;
   totalFocusMinutes: number;
   streakDays: number;
   topSubject: string;
+  membershipTier?: string;
   isLive: boolean;
 }
 
