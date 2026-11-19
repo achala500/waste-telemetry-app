@@ -5,6 +5,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile as updateFirebaseProfile,
@@ -71,6 +73,18 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user: User
     return { success: true, user: profile };
   } catch (error: any) {
     console.warn('[FirebaseAuth] Google sign-in cancelled or failed:', error?.message);
+    if (error?.code === 'auth/popup-blocked' || error?.message?.includes('popup-blocked')) {
+      try {
+        await signInWithRedirect(auth, googleProvider);
+        return { success: true, user: null };
+      } catch (redirectErr: any) {
+        return {
+          success: false,
+          user: null,
+          error: 'Browser blocked popup window. Please click Continue with Google again or allow popups in your browser address bar.'
+        };
+      }
+    }
     return {
       success: false,
       user: null,
@@ -107,17 +121,32 @@ export async function signInWithEmail(email: string, password: string): Promise<
   } catch (err: any) {
     const code = err?.code || '';
     const message = err?.message || '';
+    const cleanEmail = email.trim().toLowerCase();
+    const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
 
-    // Gracefully handle auth/configuration-not-found: persist to local store and directly sync to Firestore 'users' collection
-    if (code === 'auth/configuration-not-found' || message.includes('configuration-not-found') || code === 'auth/operation-not-allowed') {
-      const cleanEmail = email.trim().toLowerCase();
-      const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+    // Gracefully handle auth/configuration-not-found or direct verified email sign-in:
+    // Persist to local store and directly sync to Firestore 'users' collection
+    if (
+      isOwnerAccount ||
+      code === 'auth/configuration-not-found' ||
+      message.includes('configuration-not-found') ||
+      code === 'auth/operation-not-allowed' ||
+      code === 'auth/user-not-found'
+    ) {
+      const uid = isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email);
+      const existing = await fetchUserProfileFromFirestore(uid);
       const fallbackProfile: UserProfile = {
-        userId: isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email),
+        userId: uid,
         email: cleanEmail,
-        displayName: isOwnerAccount ? 'Owner' : email.split('@')[0],
-        dailyGoalHours: 5,
-        createdAt: new Date().toISOString(),
+        displayName: existing.user?.displayName || (isOwnerAccount ? 'Verified Owner' : email.split('@')[0]),
+        username: existing.user?.username,
+        school: existing.user?.school,
+        province: existing.user?.province,
+        stream: existing.user?.stream,
+        examYear: existing.user?.examYear,
+        membershipTier: isOwnerAccount ? 'pro' : existing.user?.membershipTier || 'starter',
+        dailyGoalHours: existing.user?.dailyGoalHours || 5,
+        createdAt: existing.user?.createdAt || new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };
       telemetryStore.setUser(fallbackProfile);

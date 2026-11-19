@@ -817,93 +817,24 @@ function getLocalLeaderboardFallback(): LeaderboardEntry[] {
     } catch {}
   }
 
-  const cohort: LeaderboardEntry[] = [
-    {
-      rank: 1,
-      displayName: 'Kavindu Perera (Royal College)',
-      email: 'kavindu.p@al.study',
-      totalFocusMinutes: 1840,
-      streakDays: 14,
-      topSubject: 'Combined Maths',
-      isLive: true
-    },
-    {
-      rank: 2,
-      displayName: 'Shenali De Silva (Visakha Vidyalaya)',
-      email: 'shenali.d@al.study',
-      totalFocusMinutes: 1690,
-      streakDays: 12,
-      topSubject: 'Physics',
-      isLive: true
-    },
-    {
-      rank: 3,
-      displayName: 'Janith Bandara (Kingswood)',
-      email: 'janith.b@al.study',
-      totalFocusMinutes: 1520,
-      streakDays: 9,
-      topSubject: 'Chemistry',
-      isLive: false
-    },
-    {
-      rank: 4,
-      displayName: 'Thisara Fernando (Ananda College)',
-      email: 'thisara.f@al.study',
-      totalFocusMinutes: 1380,
-      streakDays: 8,
-      topSubject: 'Combined Maths',
-      isLive: true
-    },
-    {
-      rank: 5,
-      displayName: 'Nuwanthi Wickramasinghe (Mahamaya)',
-      email: 'nuwanthi.w@al.study',
-      totalFocusMinutes: 1210,
-      streakDays: 7,
-      topSubject: 'Physics',
-      isLive: false
-    },
-    {
-      rank: 6,
-      displayName: 'Dinuka Senaratne (St. Thomas)',
-      email: 'dinuka.s@al.study',
-      totalFocusMinutes: 980,
-      streakDays: 6,
-      topSubject: 'Chemistry',
-      isLive: true
-    },
-    {
-      rank: 7,
-      displayName: 'Malsha Jayawardena (Devi Balika)',
-      email: 'malsha.j@al.study',
-      totalFocusMinutes: 840,
-      streakDays: 5,
-      topSubject: 'Combined Maths',
-      isLive: false
-    }
-  ];
-
-  if (currentUser) {
+  if (currentUser && currentUser.email) {
     const userEntry: LeaderboardEntry = {
-      rank: 0,
-      displayName: currentUser.displayName || currentUser.email.split('@')[0] || 'You (Me)',
+      rank: 1,
+      displayName: currentUser.displayName || currentUser.username || currentUser.email.split('@')[0] || 'A/L Student',
+      username: currentUser.username,
+      school: currentUser.school,
+      province: currentUser.province,
       email: currentUser.email,
-      totalFocusMinutes: userFocusMinutes || 720,
-      streakDays: userStreak,
+      totalFocusMinutes: userFocusMinutes,
+      streakDays: Math.max(1, Math.floor(userFocusMinutes / 120)),
       topSubject: userTopSubject,
+      membershipTier: currentUser.membershipTier || 'starter',
       isLive: true
     };
-
-    const filtered = cohort.filter((e) => e.email !== currentUser!.email);
-    filtered.push(userEntry);
-    filtered.sort((a, b) => b.totalFocusMinutes - a.totalFocusMinutes);
-    filtered.forEach((e, i) => {
-      e.rank = i + 1;
-    });
-    return filtered;
+    return [userEntry];
   }
 
-  return cohort;
+  return [];
 }
 
 /**

@@ -51,6 +51,10 @@ import {
   adminUpdateUserInFirestore,
   adminDeleteUserFromFirestore
 } from '@/lib/firestoreSync';
+import {
+  isPublicPaymentsEnabled,
+  setPublicPaymentsEnabled
+} from '@/lib/stripeService';
 import { PaperPreviewModal } from '@/components/PaperPreviewModal';
 import { useTelemetryStore } from '@/lib/telemetryStore';
 import { signInWithGoogle } from '@/lib/firebaseAuth';
@@ -97,6 +101,18 @@ export default function AdminPage() {
   const [paperSubjectFilter, setPaperSubjectFilter] = useState('All');
   const [paperViewFilter, setPaperViewFilter] = useState<'all' | 'quarantined' | 'published'>('all');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [paymentsLive, setPaymentsLive] = useState(false);
+
+  useEffect(() => {
+    setPaymentsLive(isPublicPaymentsEnabled());
+  }, []);
+
+  const togglePublicPayments = () => {
+    const next = !paymentsLive;
+    setPaymentsLive(next);
+    setPublicPaymentsEnabled(next);
+    showToast(`Stripe public payment gateway is now ${next ? 'ENABLED (Paywall Active)' : 'DISABLED (100% Free for Students)'}.`);
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -350,6 +366,18 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={togglePublicPayments}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                paymentsLive
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
+              }`}
+              title="Toggle public Stripe paywall vs 100% Free Open Mode"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Stripe Paywall: {paymentsLive ? 'ON' : 'OFF (100% Free)'}</span>
+            </button>
             <Link
               href="/"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 hover:text-white border border-white/10 transition-colors"

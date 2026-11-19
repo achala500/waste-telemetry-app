@@ -181,11 +181,11 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
             className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-zinc-400 hover:text-white hover:bg-white/5 transition-colors group"
           >
             <div className="flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
-              <span>Membership</span>
+              <Sparkles className="w-3.5 h-3.5 text-[#A3E635] group-hover:scale-110 transition-transform" />
+              <span>Open Access</span>
             </div>
-            <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full font-bold border border-amber-500/20">
-              Pro / Master
+            <span className="text-[10px] text-[#A3E635] bg-[#A3E635]/10 px-2 py-0.5 rounded-full font-bold border border-[#A3E635]/20">
+              Free
             </span>
           </Link>
 

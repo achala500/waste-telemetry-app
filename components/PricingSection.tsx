@@ -18,8 +18,10 @@ import {
   PricingTierDetails,
   initiateStripeCheckout,
   getUserMembershipTier,
-  SubscriptionTier
+  SubscriptionTier,
+  isPublicPaymentsEnabled
 } from '@/lib/stripeService';
+import Link from 'next/link';
 import { useTelemetryStore } from '@/lib/telemetryStore';
 
 export const PricingSection: React.FC = () => {
@@ -29,8 +31,10 @@ export const PricingSection: React.FC = () => {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [activeTier, setActiveTier] = useState<SubscriptionTier>('free');
   const [successNote, setSuccessNote] = useState<string | null>(null);
+  const [paymentsEnabled, setPaymentsEnabled] = useState(false);
 
   useEffect(() => {
+    setPaymentsEnabled(isPublicPaymentsEnabled());
     const current = getUserMembershipTier(storeState.user?.email || undefined);
     setActiveTier(current);
   }, [storeState.user]);
@@ -66,6 +70,74 @@ export const PricingSection: React.FC = () => {
     const symbol = currency === 'LKR' ? 'Rs.' : '$';
     return `${symbol} ${val.toLocaleString()}`;
   };
+
+  if (!paymentsEnabled) {
+    return (
+      <section className="relative overflow-hidden py-16 md:py-24 bg-[#08080A]">
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-[#A3E635]/10 rounded-full blur-[140px] pointer-events-none" />
+
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 relative z-10 text-center space-y-8">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#A3E635]/10 border border-[#A3E635]/20 text-[#A3E635] text-xs font-bold">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>100% FREE & OPEN ACCESS FOR STUDENTS</span>
+          </div>
+
+          <h2 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight">
+            All Features Unlocked. <br />
+            <span className="text-[#A3E635]">Zero Fees. Zero Paywalls.</span>
+          </h2>
+
+          <p className="text-sm sm:text-base text-zinc-400 max-w-2xl mx-auto leading-relaxed">
+            Chrono is dedicated to empowering every Sri Lankan Advanced Level student. All tools, 24-hour timeline logging, past paper archives, national leaderboard, and Google Cloud sync are completely free.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left max-w-2xl mx-auto pt-4">
+            <div className="p-4 rounded-2xl bg-[#141416] border border-white/5 space-y-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Check className="w-4 h-4 text-[#A3E635]" />
+                <span>Unlimited 24-Hour Logging</span>
+              </div>
+              <p className="text-xs text-zinc-400">Stopwatch, deep work capsules, and distraction tracking with millisecond precision.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#141416] border border-white/5 space-y-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Check className="w-4 h-4 text-[#A3E635]" />
+                <span>Google Sheets Sync</span>
+              </div>
+              <p className="text-xs text-zinc-400">Automatic real-time export directly to your personal Google Spreadsheet.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#141416] border border-white/5 space-y-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Check className="w-4 h-4 text-[#A3E635]" />
+                <span>Verified Past Papers Vault</span>
+              </div>
+              <p className="text-xs text-zinc-400">Free download and in-app preview of A/L National and Provincial exam papers.</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-[#141416] border border-white/5 space-y-2">
+              <div className="flex items-center gap-2 text-white font-bold text-sm">
+                <Check className="w-4 h-4 text-[#A3E635]" />
+                <span>National Island Leaderboard</span>
+              </div>
+              <p className="text-xs text-zinc-400">Real-time study rank tracking across all schools and provinces without subscription fees.</p>
+            </div>
+          </div>
+
+          <div className="pt-4">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-[#A3E635] text-black font-extrabold text-sm hover:bg-[#86efac] active:scale-95 transition-all shadow-lg shadow-[#A3E635]/20"
+            >
+              <span>Launch Focus Studio (Free)</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="relative overflow-hidden py-16 md:py-24 bg-[#08080A]">

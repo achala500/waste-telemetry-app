@@ -77,23 +77,23 @@ export const LandingHero: React.FC = () => {
             </Link>
           </div>
 
-          {/* Social Proof Stats */}
+          {/* Feature Architecture Badges - Real Capabilities */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-8 border-t border-white/10 max-w-3xl mx-auto text-left">
-            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5">
-              <span className="text-2xl font-black text-white tabular-nums">48,000+</span>
-              <p className="text-[11px] text-zinc-400 font-medium">Study Hours Logged</p>
+            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5 space-y-0.5">
+              <span className="text-sm font-black text-white">Dual Cloud Sync</span>
+              <p className="text-[11px] text-zinc-400 font-medium">Firestore & Google Sheets</p>
             </div>
-            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5">
-              <span className="text-2xl font-black text-[#A3E635] tabular-nums">99.8%</span>
-              <p className="text-[11px] text-zinc-400 font-medium">Sheets Sync Uptime</p>
+            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5 space-y-0.5">
+              <span className="text-sm font-black text-[#A3E635]">100% Free</span>
+              <p className="text-[11px] text-zinc-400 font-medium">Open Student Access</p>
             </div>
-            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5">
-              <span className="text-2xl font-black text-amber-400 tabular-nums">1,200+</span>
-              <p className="text-[11px] text-zinc-400 font-medium">Verified PDF Papers</p>
+            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5 space-y-0.5">
+              <span className="text-sm font-black text-amber-400">Drive Vault</span>
+              <p className="text-[11px] text-zinc-400 font-medium">Verified A/L Past Papers</p>
             </div>
-            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5">
-              <span className="text-2xl font-black text-sky-400 tabular-nums">0%</span>
-              <p className="text-[11px] text-zinc-400 font-medium">Data Tracking / Ads</p>
+            <div className="bg-[#141416]/60 border border-white/5 rounded-2xl p-3.5 space-y-0.5">
+              <span className="text-sm font-black text-sky-400">Zero Ads</span>
+              <p className="text-[11px] text-zinc-400 font-medium">Private & Distraction Free</p>
             </div>
           </div>
         </div>

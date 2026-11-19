@@ -372,15 +372,18 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
             ) : (
               layoutBlocks.map((item) => {
                 const { block, startMins, durMins, trackIndex, totalTracks } = item;
-                const baseWidthPct = Math.max(6, (durMins / TOTAL_MINUTES) * 100);
-                const colWidthPct = totalTracks > 1 ? Math.max(4, baseWidthPct / totalTracks) : baseWidthPct;
-                const colLeftPct = (startMins / TOTAL_MINUTES) * 100 + (trackIndex * colWidthPct);
+                const leftPct = (startMins / TOTAL_MINUTES) * 100;
+                const widthPct = Math.max(4, (durMins / TOTAL_MINUTES) * 100);
 
                 const isFocus = block.category === 'focus';
                 const isWasted = block.category === 'wasted';
 
-                // True full-height column rendering
+                // True horizontal lane distribution: each overlapping block gets its own horizontal row
                 const totalHeightAvailable = canvasHeight - 44;
+                const laneHeight = totalTracks > 1
+                  ? Math.max(34, Math.floor((totalHeightAvailable - (totalTracks - 1) * 4) / totalTracks))
+                  : totalHeightAvailable;
+                const topPx = 2 + trackIndex * (laneHeight + 4);
 
                 return (
                   <div
@@ -390,13 +393,13 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
                       setSelectedBlock(block);
                     }}
                     style={{
-                      left: `${colLeftPct}%`,
-                      width: `${colWidthPct}%`,
-                      minWidth: totalTracks > 1 ? '70px' : '90px',
-                      top: '2px',
-                      height: `${totalHeightAvailable}px`
+                      left: `${leftPct}%`,
+                      width: `${widthPct}%`,
+                      minWidth: '65px',
+                      top: `${topPx}px`,
+                      height: `${laneHeight}px`
                     }}
-                    className={`absolute rounded-xl p-2 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:z-30 overflow-hidden ${
+                    className={`absolute rounded-xl px-2 py-1 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] hover:z-30 overflow-hidden ${
                       isFocus
                         ? 'bg-[#182613]/95 border-[#A3E635]/40 text-[#A3E635]'
                         : isWasted

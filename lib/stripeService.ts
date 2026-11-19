@@ -62,7 +62,7 @@ export const MEMBERSHIP_TIERS: PricingTierDetails[] = [
   },
   {
     id: 'master',
-    name: 'Master Cohort',
+    name: 'Apex Scholar',
     badge: 'Island Top 100',
     tagline: 'AI study telemetry analytics, mentor reviews & marking schemes',
     priceLkr: 3500,
@@ -77,9 +77,27 @@ export const MEMBERSHIP_TIERS: PricingTierDetails[] = [
       'Weekly automated Telegram / Email study digest',
       'Direct mentor review for past paper answers'
     ],
-    ctaLabel: 'Join Master Cohort'
+    ctaLabel: 'Claim Apex Scholar'
   }
 ];
+
+export const PAYMENTS_ENABLED_STORAGE_KEY = 'chrono_public_payments_enabled';
+
+export function isPublicPaymentsEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return localStorage.getItem(PAYMENTS_ENABLED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setPublicPaymentsEnabled(enabled: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(PAYMENTS_ENABLED_STORAGE_KEY, enabled ? 'true' : 'false');
+  } catch {}
+}
 
 export function getMembershipTiers(): PricingTierDetails[] {
   return MEMBERSHIP_TIERS;
