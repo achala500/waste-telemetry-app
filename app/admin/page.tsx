@@ -57,7 +57,7 @@ import {
 } from '@/lib/stripeService';
 import { PaperPreviewModal } from '@/components/PaperPreviewModal';
 import { useTelemetryStore } from '@/lib/telemetryStore';
-import { signInWithGoogle, signInWithDirectGoogleEmail } from '@/lib/firebaseAuth';
+import { signInWithGoogle, authenticateAdmin } from '@/lib/firebaseAuth';
 
 const OWNER_EMAILS = [
   'aimssssff@gmail.com',
@@ -103,7 +103,10 @@ export default function AdminPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [paymentsLive, setPaymentsLive] = useState(false);
   const [adminEmailInput, setAdminEmailInput] = useState('');
+  const [adminPasswordInput, setAdminPasswordInput] = useState('');
+  const [showAdminPass, setShowAdminPass] = useState(false);
   const [adminAuthLoading, setAdminAuthLoading] = useState(false);
+  const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     setPaymentsLive(isPublicPaymentsEnabled());
@@ -130,30 +133,40 @@ export default function AdminPage() {
       (OWNER_EMAILS.includes(currentUserEmail) || currentUserEmail === envAdminEmail)
   );
 
-  const handleAdminDirectLogin = async (targetEmail?: string) => {
-    const emailToUse = (targetEmail || adminEmailInput).trim().toLowerCase();
-    if (!emailToUse || !emailToUse.includes('@')) {
-      alert('Please enter a valid administrator email.');
+  const handleAdminLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setAdminAuthError(null);
+
+    const email = adminEmailInput.trim().toLowerCase();
+    const pass = adminPasswordInput.trim();
+
+    if (!email || !email.includes('@')) {
+      setAdminAuthError('Please enter a valid administrator email.');
       return;
     }
 
-    if (!OWNER_EMAILS.includes(emailToUse) && emailToUse !== envAdminEmail) {
-      alert(`Access Denied: ${emailToUse} is not in the verified repository owner list.`);
+    if (!OWNER_EMAILS.includes(email) && email !== envAdminEmail) {
+      setAdminAuthError(`Access Denied: "${email}" is not in the verified repository owner list.`);
+      return;
+    }
+
+    if (!pass) {
+      setAdminAuthError('Administrator password is required.');
       return;
     }
 
     setAdminAuthLoading(true);
     try {
-      const res = await signInWithDirectGoogleEmail(emailToUse);
+      const res = await authenticateAdmin(email, pass);
       if (res.success && res.user) {
         setIsAuthenticated(true);
-        showToast(`Authenticated as Verified Admin: ${emailToUse}`);
+        showToast(`Authenticated as Administrator: ${email}`);
         await loadAdminData();
       } else {
-        alert(res.error || 'Failed to authenticate owner account.');
+        setAdminAuthError(res.error || 'Invalid credentials. Access denied.');
       }
     } catch (err: any) {
-      alert(err?.message || 'Authentication error.');
+      setAdminAuthError(err?.message || 'Authentication error.');
     } finally {
       setAdminAuthLoading(false);
     }
@@ -335,71 +348,95 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-xs font-medium text-zinc-300 block">Verified Owner Google Email</label>
+          {adminAuthError && (
+            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+              <svg className="w-4 h-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">{adminAuthError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleAdminLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-zinc-300 block">Administrator Email</label>
               <input
                 type="email"
+                required
                 placeholder="aimssssff@gmail.com"
                 value={adminEmailInput}
                 onChange={(e) => setAdminEmailInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAdminDirectLogin();
-                  }
-                }}
                 className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635]"
               />
-              <button
-                onClick={() => handleAdminDirectLogin()}
-                disabled={adminAuthLoading || !adminEmailInput.trim()}
-                className="w-full py-2.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] transition-all shadow-md active:scale-95 disabled:opacity-40"
-              >
-                {adminAuthLoading ? 'Verifying Admin...' : 'Unlock Owner Control Plane'}
-              </button>
             </div>
 
-            {/* Quick-Access Verified Admin Buttons */}
-            <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/5 space-y-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 block">
-                Instant Verified Owner Access:
-              </span>
-              <div className="flex flex-col gap-1.5">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-zinc-300 block">Administrator Password / Master Passkey</label>
                 <button
                   type="button"
-                  onClick={() => {
-                    setAdminEmailInput('aimssssff@gmail.com');
-                    handleAdminDirectLogin('aimssssff@gmail.com');
-                  }}
-                  className="w-full text-left font-mono text-xs px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-[#A3E635]/15 border border-white/10 hover:border-[#A3E635]/40 text-[#A3E635] transition-all flex items-center justify-between"
+                  onClick={() => setShowAdminPass(!showAdminPass)}
+                  className="text-[10px] text-zinc-400 hover:text-white font-mono"
                 >
-                  <span>aimssssff@gmail.com</span>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Unlock &rarr;</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAdminEmailInput('alwisachalaanurada@gmail.com');
-                    handleAdminDirectLogin('alwisachalaanurada@gmail.com');
-                  }}
-                  className="w-full text-left font-mono text-xs px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-[#A3E635]/15 border border-white/10 hover:border-[#A3E635]/40 text-[#A3E635] transition-all flex items-center justify-between"
-                >
-                  <span>alwisachalaanurada@gmail.com</span>
-                  <span className="text-[10px] uppercase font-bold text-zinc-400">Unlock &rarr;</span>
+                  {showAdminPass ? 'Hide' : 'Show'}
                 </button>
               </div>
+              <input
+                type={showAdminPass ? 'text' : 'password'}
+                required
+                placeholder="••••••••••••"
+                value={adminPasswordInput}
+                onChange={(e) => setAdminPasswordInput(e.target.value)}
+                className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#A3E635]"
+              />
             </div>
 
-            <div className="text-center pt-1">
+            <button
+              type="submit"
+              disabled={adminAuthLoading || !adminEmailInput.trim() || !adminPasswordInput.trim()}
+              className="w-full py-2.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] transition-all shadow-md active:scale-95 disabled:opacity-40"
+            >
+              {adminAuthLoading ? 'Authenticating...' : 'Authenticate & Unlock Admin Portal'}
+            </button>
+
+            <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between">
               <button
-                onClick={() => signInWithGoogle()}
-                className="text-xs text-zinc-400 hover:text-white underline font-mono inline-flex items-center gap-1.5"
+                type="button"
+                onClick={async () => {
+                  setAdminAuthError(null);
+                  setAdminAuthLoading(true);
+                  try {
+                    const res = await signInWithGoogle();
+                    if (res.success && res.user) {
+                      const email = res.user.email.toLowerCase();
+                      if (OWNER_EMAILS.includes(email) || email === envAdminEmail) {
+                        setIsAuthenticated(true);
+                        showToast(`Authenticated as Owner via Google: ${email}`);
+                        await loadAdminData();
+                      } else {
+                        setAdminAuthError(`Signed in with ${email}, but this Google account is not an authorized administrator.`);
+                      }
+                    } else if (res.error) {
+                      setAdminAuthError(res.error);
+                    }
+                  } catch (err: any) {
+                    setAdminAuthError(err?.message || 'Google authentication error.');
+                  } finally {
+                    setAdminAuthLoading(false);
+                  }
+                }}
+                className="text-xs text-zinc-400 hover:text-white flex items-center gap-2 font-mono transition-colors"
               >
-                <span>Or attempt standard Google OAuth popup</span>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                </svg>
+                <span>Or Sign in with Google Account</span>
               </button>
             </div>
-          </div>
+          </form>
 
           <div className="pt-2 text-center">
             <Link href="/" className="text-xs text-zinc-500 hover:text-white transition-colors inline-flex items-center gap-1.5">

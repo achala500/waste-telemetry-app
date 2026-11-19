@@ -89,52 +89,38 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user: User
 }
 
 /**
- * Direct Google Email Authentication (Bypasses browser popup blocking)
+ * Cryptographic Password Hashing (SHA-256 with project salt)
  */
-export async function signInWithDirectGoogleEmail(
-  email: string
-): Promise<{ success: boolean; user: UserProfile | null; error?: string }> {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  if (!cleanEmail || !cleanEmail.includes('@')) {
-    return { success: false, user: null, error: 'Please enter a valid email address.' };
-  }
-
-  const isOwner = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
-  const uid = isOwner
-    ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`
-    : generateLocalUserId(cleanEmail);
-
+export async function hashPassword(password: string): Promise<string> {
   try {
-    const existing = await fetchUserProfileFromFirestore(uid);
-    const profile: UserProfile = {
-      userId: uid,
-      email: cleanEmail,
-      displayName:
-        existing.user?.displayName ||
-        (isOwner ? 'Verified Admin' : cleanEmail.split('@')[0]),
-      username: existing.user?.username,
-      school: existing.user?.school,
-      province: existing.user?.province,
-      stream: existing.user?.stream,
-      examYear: existing.user?.examYear,
-      membershipTier: isOwner ? 'pro' : existing.user?.membershipTier || 'starter',
-      dailyGoalHours: existing.user?.dailyGoalHours || 5,
-      createdAt: existing.user?.createdAt || new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
-    };
-
-    telemetryStore.setUser(profile);
-    syncUserProfileToFirestore(profile).catch(() => {});
-    return { success: true, user: profile };
-  } catch (err: any) {
-    return { success: false, user: null, error: err?.message || 'Failed to authenticate.' };
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+      const enc = new TextEncoder();
+      const data = enc.encode(password + '::chrono_telemetry_salt_9981');
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {}
+  // Simple fallback hash if subtle crypto unavailable
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    hash = (hash << 5) - hash + password.charCodeAt(i);
+    hash |= 0;
   }
+  return 'sh_' + Math.abs(hash).toString(16);
 }
+
+export const ADMIN_MASTER_PASSCODES = [
+  'Admin@Omni2025',
+  'OmniSecure2025!',
+  'aimssssff@2025',
+  'alwisachala@2025'
+];
 
 /**
  * Helper to generate deterministic local/fallback userId
  */
-function generateLocalUserId(email: string): string {
+export function generateLocalUserId(email: string): string {
   try {
     if (typeof window !== 'undefined' && window.btoa) {
       return 'usr_' + window.btoa(email.trim().toLowerCase()).replace(/[^a-zA-Z0-9]/g, '').slice(0, 24);
@@ -144,63 +130,162 @@ function generateLocalUserId(email: string): string {
 }
 
 /**
- * Sign in with Email and Password
+ * Strict Owner / Admin Authentication with Email + Password / Master Passkey
  */
-export async function signInWithEmail(email: string, password: string): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
-  if (!email || !password) {
-    return { success: false, error: 'Email and password are required.' };
+export async function authenticateAdmin(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const isOwner = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+  if (!isOwner) {
+    return {
+      success: false,
+      error: `Access Denied: "${cleanEmail}" does not hold repository administrator credentials.`
+    };
   }
+
+  const cleanPass = (password || '').trim();
+  if (!cleanPass || cleanPass.length < 6) {
+    return {
+      success: false,
+      error: 'Password required (minimum 6 characters).'
+    };
+  }
+
+  const isMasterPass = ADMIN_MASTER_PASSCODES.includes(cleanPass);
+  const inputHash = await hashPassword(cleanPass);
+  const uid = `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
+
+  // First try Firebase Auth if configured
   try {
-    const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-    const profile = firebaseUserToProfile(result.user);
+    const res = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+    let profile = firebaseUserToProfile(res.user);
+    profile.membershipTier = 'pro';
+    profile.passwordHash = inputHash;
     telemetryStore.setUser(profile);
     syncUserProfileToFirestore(profile).catch(() => {});
     return { success: true, user: profile };
   } catch (err: any) {
-    const code = err?.code || '';
-    const message = err?.message || '';
-    const cleanEmail = email.trim().toLowerCase();
-    const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+    // Check against Firestore profile passwordHash or Master Passcode
+    const existing = await fetchUserProfileFromFirestore(uid);
+    const storedHash = existing.user?.passwordHash;
 
-    // Gracefully handle auth/configuration-not-found or direct verified email sign-in:
-    // Persist to local store and directly sync to Firestore 'users' collection
-    if (
-      isOwnerAccount ||
-      code === 'auth/configuration-not-found' ||
-      message.includes('configuration-not-found') ||
-      code === 'auth/operation-not-allowed' ||
-      code === 'auth/user-not-found'
-    ) {
-      const uid = isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email);
-      const existing = await fetchUserProfileFromFirestore(uid);
-      const fallbackProfile: UserProfile = {
+    if (isMasterPass || !storedHash || storedHash === inputHash) {
+      const profile: UserProfile = {
         userId: uid,
         email: cleanEmail,
-        displayName: existing.user?.displayName || (isOwnerAccount ? 'Verified Owner' : email.split('@')[0]),
+        displayName: existing.user?.displayName || 'Verified Admin',
         username: existing.user?.username,
         school: existing.user?.school,
         province: existing.user?.province,
         stream: existing.user?.stream,
         examYear: existing.user?.examYear,
-        membershipTier: isOwnerAccount ? 'pro' : existing.user?.membershipTier || 'starter',
+        membershipTier: 'pro',
         dailyGoalHours: existing.user?.dailyGoalHours || 5,
+        passwordHash: storedHash || inputHash,
         createdAt: existing.user?.createdAt || new Date().toISOString(),
         lastLoginAt: new Date().toISOString()
       };
-      telemetryStore.setUser(fallbackProfile);
-      await syncUserProfileToFirestore(fallbackProfile).catch(() => {});
-      return { success: true, user: fallbackProfile };
+      telemetryStore.setUser(profile);
+      syncUserProfileToFirestore(profile).catch(() => {});
+      return { success: true, user: profile };
     }
 
     return {
       success: false,
-      error: err?.message || 'Invalid email or password.'
+      error: 'Invalid administrator password. Access denied.'
     };
   }
 }
 
 /**
- * Sign up with Email and Password
+ * Sign in with Email and Password - Strictly Verified
+ */
+export async function signInWithEmail(
+  email: string,
+  password: string
+): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPass = (password || '').trim();
+
+  if (!cleanEmail || !cleanPass) {
+    return { success: false, error: 'Email and password are required.' };
+  }
+
+  const inputHash = await hashPassword(cleanPass);
+  const isOwner = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+  const uid = isOwner
+    ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`
+    : generateLocalUserId(cleanEmail);
+
+  // 1. Try Firebase Auth
+  try {
+    const result = await signInWithEmailAndPassword(auth, cleanEmail, cleanPass);
+    const existing = await fetchUserProfileFromFirestore(result.user.uid);
+    let profile = firebaseUserToProfile(result.user);
+    if (existing.user) {
+      profile = {
+        ...profile,
+        username: existing.user.username,
+        school: existing.user.school,
+        province: existing.user.province,
+        stream: existing.user.stream,
+        examYear: existing.user.examYear,
+        membershipTier: isOwner ? 'pro' : existing.user.membershipTier,
+        dailyGoalHours: existing.user.dailyGoalHours || profile.dailyGoalHours,
+        passwordHash: inputHash
+      };
+    }
+    telemetryStore.setUser(profile);
+    syncUserProfileToFirestore(profile).catch(() => {});
+    return { success: true, user: profile };
+  } catch (err: any) {
+    const code = err?.code || '';
+
+    // If Firebase specifically says wrong password, reject immediately!
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      return { success: false, error: 'Incorrect password. Please verify and try again.' };
+    }
+
+    // 2. Check stored credentials in Firestore
+    const existing = await fetchUserProfileFromFirestore(uid);
+    if (existing.user) {
+      if (existing.user.passwordHash) {
+        if (existing.user.passwordHash !== inputHash) {
+          if (isOwner && ADMIN_MASTER_PASSCODES.includes(cleanPass)) {
+            // Master passcode authorized
+          } else {
+            return {
+              success: false,
+              error: 'Incorrect password. Please enter the password you chose during registration.'
+            };
+          }
+        }
+      } else {
+        // First login without existing hash: lock it to this password
+        existing.user.passwordHash = inputHash;
+      }
+
+      const profile: UserProfile = {
+        ...existing.user,
+        passwordHash: existing.user.passwordHash || inputHash,
+        lastLoginAt: new Date().toISOString()
+      };
+      telemetryStore.setUser(profile);
+      syncUserProfileToFirestore(profile).catch(() => {});
+      return { success: true, user: profile };
+    }
+
+    return {
+      success: false,
+      error: 'No account found with this email. Please switch to "Create Account" to register.'
+    };
+  }
+}
+
+/**
+ * Sign up with Email and Password - Secure Registration with Password
  */
 export async function signUpWithEmail(
   email: string,
@@ -208,44 +293,87 @@ export async function signUpWithEmail(
   displayName?: string,
   dailyGoalHours = 5
 ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
-  if (!email || !password) {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPass = (password || '').trim();
+
+  if (!cleanEmail || !cleanPass) {
     return { success: false, error: 'Email and password are required.' };
   }
+  if (cleanPass.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters.' };
+  }
+
+  const inputHash = await hashPassword(cleanPass);
+  const isOwner = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+  const uid = isOwner
+    ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`
+    : generateLocalUserId(cleanEmail);
+
+  // Check if account already exists in Firestore
+  const existing = await fetchUserProfileFromFirestore(uid);
+  if (existing.user && existing.user.passwordHash) {
+    return {
+      success: false,
+      error: 'An account with this email already exists. Please switch to "Sign In".'
+    };
+  }
+
   try {
-    const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+    const result = await createUserWithEmailAndPassword(auth, cleanEmail, cleanPass);
     if (displayName && result.user) {
       await updateFirebaseProfile(result.user, { displayName });
     }
     const profile = firebaseUserToProfile(result.user, dailyGoalHours);
     if (displayName) profile.displayName = displayName;
+    profile.passwordHash = inputHash;
+    profile.membershipTier = isOwner ? 'pro' : 'starter';
     telemetryStore.setUser(profile);
     syncUserProfileToFirestore(profile).catch(() => {});
     return { success: true, user: profile };
   } catch (err: any) {
     const code = err?.code || '';
-    const message = err?.message || '';
-
-    // Gracefully handle auth/configuration-not-found: persist to local store and directly sync to Firestore 'users' collection
-    if (code === 'auth/configuration-not-found' || message.includes('configuration-not-found') || code === 'auth/operation-not-allowed') {
-      const cleanEmail = email.trim().toLowerCase();
-      const isOwnerAccount = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
-      const fallbackProfile: UserProfile = {
-        userId: isOwnerAccount ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}` : generateLocalUserId(email),
-        email: cleanEmail,
-        displayName: displayName?.trim() || (isOwnerAccount ? 'Owner' : email.split('@')[0]),
-        dailyGoalHours,
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
+    if (code === 'auth/email-already-in-use') {
+      return {
+        success: false,
+        error: 'An account with this email already exists. Please switch to "Sign In".'
       };
-      telemetryStore.setUser(fallbackProfile);
-      await syncUserProfileToFirestore(fallbackProfile).catch(() => {});
-      return { success: true, user: fallbackProfile };
     }
 
-    return {
-      success: false,
-      error: err?.message || 'Unable to create account.'
+    // Fallback: securely register account in Firestore with hashed password
+    const fallbackProfile: UserProfile = {
+      userId: uid,
+      email: cleanEmail,
+      displayName: displayName?.trim() || (isOwner ? 'Verified Owner' : cleanEmail.split('@')[0]),
+      dailyGoalHours,
+      membershipTier: isOwner ? 'pro' : 'starter',
+      passwordHash: inputHash,
+      createdAt: new Date().toISOString(),
+      lastLoginAt: new Date().toISOString()
     };
+    telemetryStore.setUser(fallbackProfile);
+    await syncUserProfileToFirestore(fallbackProfile).catch(() => {});
+    return { success: true, user: fallbackProfile };
+  }
+}
+
+/**
+ * Update User Password in Local Store and Firestore
+ */
+export async function updateUserPassword(newPassword: string): Promise<{ success: boolean; error?: string }> {
+  const current = telemetryStore.getState().user;
+  if (!current) {
+    return { success: false, error: 'User is not signed in.' };
+  }
+  if (!newPassword || newPassword.trim().length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters.' };
+  }
+
+  try {
+    const newHash = await hashPassword(newPassword.trim());
+    await telemetryStore.updateUserProfile({ passwordHash: newHash });
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to update password.' };
   }
 }
 

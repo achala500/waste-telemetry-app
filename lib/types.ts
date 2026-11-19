@@ -178,6 +178,7 @@ export interface UserProfile {
   membershipTier?: 'starter' | 'pro' | 'master';
   isBanned?: boolean;
   totalFocusMinutes?: number;
+  passwordHash?: string;
   createdAt: string;
   lastLoginAt: string;
 }
