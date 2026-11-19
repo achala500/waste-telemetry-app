@@ -26,17 +26,16 @@ const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 
 export const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/spreadsheets');
-googleProvider.addScope('https://www.googleapis.com/auth/drive.file');
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 /**
- * Convert Firebase User to domain UserProfile
+ * Convert real Firebase User to domain UserProfile
  */
 export function firebaseUserToProfile(user: User, customDailyGoalHours = 5): UserProfile {
   return {
     userId: user.uid,
     email: user.email || 'user@omnitelemetry.app',
-    displayName: user.displayName || user.email?.split('@')[0] || 'Omni User',
+    displayName: user.displayName || user.email?.split('@')[0] || 'Student',
     avatarUrl: user.photoURL || undefined,
     dailyGoalHours: customDailyGoalHours,
     createdAt: user.metadata.creationTime || new Date().toISOString(),
@@ -45,29 +44,21 @@ export function firebaseUserToProfile(user: User, customDailyGoalHours = 5): Use
 }
 
 /**
- * Sign in with Google Popup and synchronize with telemetryStore + Users tab
+ * Sign in with Google Popup - Real Google Authentication only (Zero Dummy Accounts)
  */
-export async function signInWithGoogle(): Promise<{ success: boolean; user: User | UserProfile | null; token?: string; error?: string }> {
+export async function signInWithGoogle(): Promise<{ success: boolean; user: UserProfile | null; error?: string }> {
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    const token = credential?.accessToken;
     const profile = firebaseUserToProfile(result.user);
     telemetryStore.setUser(profile);
-    return { success: true, user: result.user, token };
+    return { success: true, user: profile };
   } catch (error: any) {
-    console.warn('[FirebaseAuth] Google popup issue, applying demo profile:', error);
-    const demoProfile: UserProfile = {
-      userId: 'usr-google-omni',
-      email: 'alex.vance@gmail.com',
-      displayName: 'Alex Vance',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',
-      dailyGoalHours: 6,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
+    console.warn('[FirebaseAuth] Google sign-in cancelled or failed:', error?.message);
+    return {
+      success: false,
+      user: null,
+      error: error?.message || 'Google sign-in could not be completed.'
     };
-    telemetryStore.setUser(demoProfile);
-    return { success: true, user: demoProfile };
   }
 }
 
@@ -83,18 +74,11 @@ export async function signInWithEmail(email: string, password: string): Promise<
     const profile = firebaseUserToProfile(result.user);
     telemetryStore.setUser(profile);
     return { success: true, user: profile };
-  } catch (err: unknown) {
-    // Fallback demo for resilience
-    const mockUser: UserProfile = {
-      userId: `usr-${Math.random().toString(36).slice(2, 9)}`,
-      email: email.trim(),
-      displayName: email.split('@')[0] || 'Omni User',
-      dailyGoalHours: 5,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Invalid email or password.'
     };
-    telemetryStore.setUser(mockUser);
-    return { success: true, user: mockUser };
   }
 }
 
@@ -119,17 +103,11 @@ export async function signUpWithEmail(
     if (displayName) profile.displayName = displayName;
     telemetryStore.setUser(profile);
     return { success: true, user: profile };
-  } catch (err: unknown) {
-    const mockUser: UserProfile = {
-      userId: `usr-${Math.random().toString(36).slice(2, 9)}`,
-      email: email.trim(),
-      displayName: displayName?.trim() || email.split('@')[0] || 'Omni User',
-      dailyGoalHours: Number(dailyGoalHours) || 5,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: new Date().toISOString()
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || 'Unable to create account.'
     };
-    telemetryStore.setUser(mockUser);
-    return { success: true, user: mockUser };
   }
 }
 
@@ -145,7 +123,7 @@ export async function logOutUser() {
 export const signOutUser = logOutUser;
 
 /**
- * Setup continuous listener
+ * Global persistent auth listener - updates telemetryStore everywhere
  */
 if (typeof window !== 'undefined') {
   onAuthStateChanged(auth, (firebaseUser) => {
@@ -155,6 +133,8 @@ if (typeof window !== 'undefined') {
         const profile = firebaseUserToProfile(firebaseUser, current?.dailyGoalHours || 5);
         telemetryStore.setUser(profile);
       }
+    } else {
+      telemetryStore.setUser(null);
     }
   });
 }

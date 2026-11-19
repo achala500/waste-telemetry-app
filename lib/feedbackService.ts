@@ -415,5 +415,76 @@ Items resolved: ${JSON.stringify(sanitizedInputs)}`;
     localStorage.setItem('chrono_dynamic_changelog', JSON.stringify([newEntry, ...existing]));
   } catch {}
 
+  // Save entry to Firestore
+  try {
+    const config = DEFAULT_FIRESTORE_CONFIG;
+    const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/${CHANGELOG_COLLECTION}/${version.replace(/\./g, '_')}?key=${config.apiKey}`;
+    await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          version: { stringValue: newEntry.version },
+          date: { stringValue: newEntry.date },
+          headline: { stringValue: newEntry.headline },
+          plainEnglishSummary: { stringValue: newEntry.plainEnglishSummary },
+          tag: { stringValue: newEntry.tag },
+          isLatest: { booleanValue: true },
+          rawJson: { stringValue: JSON.stringify({
+            shippedFixes: newEntry.shippedFixes,
+            uxRefinements: newEntry.uxRefinements,
+            communityFeatures: newEntry.communityFeatures
+          })}
+        }
+      })
+    });
+  } catch {}
+
   return newEntry;
+}
+
+/**
+ * Fetch real published changelog entries from Firestore
+ */
+export async function fetchChangelogEntries(): Promise<ChangelogEntry[]> {
+  try {
+    const config = DEFAULT_FIRESTORE_CONFIG;
+    const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/${CHANGELOG_COLLECTION}?pageSize=50&key=${config.apiKey}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json();
+      const docs = data.documents || [];
+      if (docs.length > 0) {
+        return docs.map((d: any) => {
+          const f = d.fields || {};
+          let rawJson: any = {};
+          try {
+            if (f.rawJson?.stringValue) {
+              rawJson = JSON.parse(f.rawJson.stringValue);
+            }
+          } catch {}
+          return {
+            version: f.version?.stringValue || 'v1.5.0',
+            date: f.date?.stringValue || '',
+            headline: f.headline?.stringValue || 'Release Notes',
+            plainEnglishSummary: f.plainEnglishSummary?.stringValue || '',
+            fixedFeedbackIds: [],
+            tag: (f.tag?.stringValue || 'minor') as any,
+            isLatest: !!f.isLatest?.booleanValue,
+            shippedFixes: rawJson.shippedFixes || [],
+            uxRefinements: rawJson.uxRefinements || [],
+            communityFeatures: rawJson.communityFeatures || []
+          };
+        });
+      }
+    }
+  } catch {}
+
+  // Fallback to local cache
+  try {
+    const local = JSON.parse(localStorage.getItem('chrono_dynamic_changelog') || '[]');
+    return local;
+  } catch {
+    return [];
+  }
 }

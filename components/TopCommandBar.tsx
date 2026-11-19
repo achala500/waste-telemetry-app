@@ -191,26 +191,26 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-[#08080A]/90 backdrop-blur-xl border-b border-white/5 px-4 md:px-8 py-3">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+    <header className="sticky top-0 z-30 bg-[#08080A]/95 backdrop-blur-xl border-b border-white/5 px-4 md:px-8 py-2.5">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 flex-nowrap overflow-x-auto no-scrollbar">
         {/* Left: Quick Log Input */}
-        <div className="w-full md:w-72 relative flex items-center">
+        <div className="flex-1 min-w-[180px] max-w-sm lg:max-w-md relative flex items-center shrink-0">
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 pointer-events-none" />
           <input
             type="text"
             value={quickInput}
             onChange={(e) => setQuickInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder='Quick log: "50m physics", "30m Reels"...'
-            className="w-full bg-[#141416] border border-white/10 rounded-2xl py-2 pl-10 pr-10 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
+            placeholder='Quick log: "50m physics", "30m Reels", "2h paper"...'
+            className="w-full bg-[#141416] border border-white/10 rounded-2xl py-2 pl-10 pr-9 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-[#A3E635] transition-colors"
           />
-          <kbd className="hidden md:inline-block absolute right-3 px-1.5 py-0.5 text-[10px] text-zinc-500 bg-white/5 border border-white/10 rounded">
+          <kbd className="hidden sm:inline-block absolute right-3 px-1.5 py-0.5 text-[10px] text-zinc-500 bg-white/5 border border-white/10 rounded pointer-events-none">
             ↵
           </kbd>
         </div>
 
         {/* Center: Upgraded Focus Timer with Pomodoro & Past Paper Modes */}
-        <div className="flex items-center gap-2 bg-[#141416] border border-white/10 px-3 py-1.5 rounded-2xl">
+        <div className="flex items-center gap-1.5 bg-[#141416] border border-white/10 px-2.5 py-1.5 rounded-2xl shrink-0">
           {/* Mode Switcher Pill */}
           <select
             value={timerMode}
@@ -260,10 +260,10 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
           </div>
         </div>
 
-        {/* Right Controls: Date Stepper, Scope Toggle, + Log Block, Sign in with Google */}
-        <div className="flex items-center gap-2.5 flex-wrap justify-end w-full md:w-auto">
+        {/* Right Controls: Single Row, No Wrapping */}
+        <div className="flex items-center gap-2 flex-nowrap shrink-0">
           {/* Date Stepper with properly styled/disabled 7D arrow */}
-          <div className="flex items-center bg-[#141416] border border-white/10 rounded-2xl p-0.5">
+          <div className="flex items-center bg-[#141416] border border-white/10 rounded-2xl p-0.5 shrink-0">
             <button
               onClick={() => onStepDate(-1)}
               disabled={scope === '7d'}
@@ -280,7 +280,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
               onClick={() => {
                 if (scope !== '7d') onStepDate(0);
               }}
-              className="px-2.5 py-1 text-xs font-semibold text-zinc-200 hover:text-white"
+              className="px-2 py-1 text-xs font-semibold text-zinc-200 hover:text-white whitespace-nowrap"
               title="Jump to Today (T)"
             >
               {formatDateDisplay(currentDate)}
@@ -300,10 +300,10 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
           </div>
 
           {/* Scope Toggle */}
-          <div className="flex items-center bg-[#141416] border border-white/10 rounded-2xl p-0.5 text-xs font-medium">
+          <div className="flex items-center bg-[#141416] border border-white/10 rounded-2xl p-0.5 text-xs font-medium shrink-0">
             <button
               onClick={() => onScopeChange('day')}
-              className={`px-3 py-1 rounded-xl transition-all ${
+              className={`px-2.5 py-1 rounded-xl transition-all ${
                 scope === 'day'
                   ? 'bg-[#A3E635] text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white'
@@ -313,7 +313,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
             </button>
             <button
               onClick={() => onScopeChange('7d')}
-              className={`px-3 py-1 rounded-xl transition-all ${
+              className={`px-2.5 py-1 rounded-xl transition-all ${
                 scope === '7d'
                   ? 'bg-[#A3E635] text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white'
@@ -323,22 +323,22 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
             </button>
           </div>
 
-          {/* + Log Block Button */}
+          {/* + Log Session Button */}
           <button
             onClick={onOpenLogModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-white transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-white transition-all active:scale-95 whitespace-nowrap shrink-0"
           >
             <Plus className="w-3.5 h-3.5 text-[#A3E635]" />
-            <span>Log Block</span>
+            <span>Log Session</span>
           </button>
 
-          {/* Google Sign In / Profile Avatar - Unified Copy */}
+          {/* Google Sign In / Profile Avatar */}
           {user ? (
             <div
               onClick={() => {
                 if (onOpenAuth) onOpenAuth();
               }}
-              className="flex items-center gap-2 bg-[#141416] border border-white/10 hover:border-[#A3E635]/40 px-2 py-1 rounded-2xl cursor-pointer transition-colors active:scale-95 group"
+              className="flex items-center gap-1.5 bg-[#141416] border border-white/10 hover:border-[#A3E635]/40 px-2 py-1 rounded-2xl cursor-pointer transition-colors active:scale-95 group shrink-0"
               title="Click to view profile & daily goals"
             >
               {user.photoURL ? (
@@ -358,9 +358,9 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleGoogleAuth();
+                  logOutUser();
                 }}
-                className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors"
+                className="text-zinc-500 hover:text-rose-400 p-1 rounded-lg transition-colors"
                 title="Sign out"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -373,8 +373,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
                 else handleGoogleAuth();
               }}
               disabled={authLoading}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 active:scale-95 transition-all shadow-sm"
-              title="Sign in with Google"
+              className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-white text-black hover:bg-zinc-200 text-xs font-semibold transition-all shadow-md active:scale-95 disabled:opacity-50 whitespace-nowrap shrink-0"
             >
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
                 <path
@@ -394,7 +393,7 @@ export const TopCommandBar: React.FC<TopCommandBarProps> = ({
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>{authLoading ? 'Signing in...' : 'Sign in with Google'}</span>
+              <span>{authLoading ? 'Connecting...' : 'Sign in with Google'}</span>
             </button>
           )}
         </div>

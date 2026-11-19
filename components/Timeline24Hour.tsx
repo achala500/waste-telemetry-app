@@ -261,7 +261,7 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-white tracking-tight">Today's Timeline</h2>
-          <p className="text-xs text-zinc-400">06:00 – 24:00 daily schedule (concurrent sessions rendered side-by-side)</p>
+          <p className="text-xs text-zinc-400">06:00 – 24:00 daily schedule</p>
         </div>
 
         {/* 1-Tap Preset Quick Chips with Subject Support */}
@@ -309,28 +309,31 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
           style={{ height: `${canvasHeight}px` }}
           className="relative w-full bg-[#08080A] border border-white/10 rounded-2xl p-2 cursor-crosshair select-none overflow-hidden"
         >
-          {/* Hour Grid Markers with Non-Clipping Anchors */}
+          {/* Hour Grid Markers - Even hours only to prevent 06:0007:00 axis collision */}
           <div className="absolute inset-x-3 top-0 bottom-6 flex justify-between pointer-events-none">
             {Array.from({ length: TOTAL_HOURS + 1 }).map((_, i) => {
               const hourNum = START_HOUR + i;
               const hourStr = `${hourNum.toString().padStart(2, '0')}:00`;
               const isFirst = i === 0;
               const isLast = i === TOTAL_HOURS;
+              const showText = hourNum % 2 === 0; // 06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00, 22:00, 24:00
 
               return (
                 <div key={i} className="flex flex-col items-center h-full relative">
-                  <div className="w-px h-full bg-white/5" />
-                  <span
-                    className={`absolute bottom-0 text-[10px] text-zinc-500 font-medium tabular-nums ${
-                      isFirst
-                        ? 'left-0 text-left'
-                        : isLast
-                        ? 'right-0 text-right'
-                        : '-translate-x-1/2 text-center'
-                    }`}
-                  >
-                    {hourStr}
-                  </span>
+                  <div className={`w-px h-full ${showText ? 'bg-white/10' : 'bg-white/5'}`} />
+                  {showText && (
+                    <span
+                      className={`absolute bottom-0 text-[10px] text-zinc-500 font-medium tabular-nums ${
+                        isFirst
+                          ? 'left-0 text-left'
+                          : isLast
+                          ? 'right-0 text-right'
+                          : '-translate-x-1/2 text-center'
+                      }`}
+                    >
+                      {hourStr}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -360,7 +363,7 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
             </div>
           )}
 
-          {/* Timeline Cards Container - Rendered Side-by-Side on Overlap */}
+          {/* Timeline Cards Container - True Side-by-Side Columns on Overlap */}
           <div className="absolute inset-x-3 top-2 bottom-8">
             {layoutBlocks.length === 0 ? (
               <div className="w-full h-full flex items-center justify-center text-xs text-zinc-500 pointer-events-none">
@@ -369,16 +372,15 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
             ) : (
               layoutBlocks.map((item) => {
                 const { block, startMins, durMins, trackIndex, totalTracks } = item;
-                const leftPct = (startMins / TOTAL_MINUTES) * 100;
-                const widthPct = Math.max(8, (durMins / TOTAL_MINUTES) * 100);
+                const baseWidthPct = Math.max(6, (durMins / TOTAL_MINUTES) * 100);
+                const colWidthPct = totalTracks > 1 ? Math.max(4, baseWidthPct / totalTracks) : baseWidthPct;
+                const colLeftPct = (startMins / TOTAL_MINUTES) * 100 + (trackIndex * colWidthPct);
 
                 const isFocus = block.category === 'focus';
                 const isWasted = block.category === 'wasted';
 
-                // Calculate lane height and top
+                // True full-height column rendering
                 const totalHeightAvailable = canvasHeight - 44;
-                const trackHeight = Math.max(34, Math.floor(totalHeightAvailable / totalTracks) - 4);
-                const trackTop = 2 + trackIndex * (trackHeight + 4);
 
                 return (
                   <div
@@ -388,18 +390,18 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
                       setSelectedBlock(block);
                     }}
                     style={{
-                      left: `${leftPct}%`,
-                      width: `${widthPct}%`,
-                      minWidth: '100px',
-                      top: `${trackTop}px`,
-                      height: `${trackHeight}px`
+                      left: `${colLeftPct}%`,
+                      width: `${colWidthPct}%`,
+                      minWidth: totalTracks > 1 ? '70px' : '90px',
+                      top: '2px',
+                      height: `${totalHeightAvailable}px`
                     }}
-                    className={`absolute rounded-xl p-2 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.01] hover:z-30 overflow-hidden ${
+                    className={`absolute rounded-xl p-2 border shadow-md flex flex-col justify-between cursor-pointer transition-all hover:scale-[1.02] hover:z-30 overflow-hidden ${
                       isFocus
-                        ? 'bg-[#182613]/90 border-[#A3E635]/40 text-[#A3E635]'
+                        ? 'bg-[#182613]/95 border-[#A3E635]/40 text-[#A3E635]'
                         : isWasted
-                        ? 'bg-[#291316]/90 border-rose-500/40 text-rose-300'
-                        : 'bg-[#131c26]/90 border-[#38BDF8]/40 text-[#38BDF8]'
+                        ? 'bg-[#291316]/95 border-rose-500/40 text-rose-300'
+                        : 'bg-[#131c26]/95 border-[#38BDF8]/40 text-[#38BDF8]'
                     }`}
                   >
                     {/* Line 1: Time Range + Subject Tag */}
@@ -413,12 +415,12 @@ export const Timeline24Hour: React.FC<Timeline24HourProps> = ({
                     </div>
 
                     {/* Line 2: Full Bold Title */}
-                    <div className="text-xs font-bold text-white truncate leading-tight">
+                    <div className="text-xs font-bold text-white truncate leading-tight my-auto">
                       {block.title || block.label}
                     </div>
 
                     {/* Line 3: Duration */}
-                    <div className="text-[9px] font-medium opacity-80 leading-none">
+                    <div className="text-[9px] font-medium opacity-80 leading-none truncate">
                       {block.durationMinutes}m • {block.tag || (isFocus ? 'Focus' : isWasted ? 'Distraction' : 'Routine')}
                     </div>
                   </div>

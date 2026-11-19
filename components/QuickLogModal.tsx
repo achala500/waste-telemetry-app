@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { BlockCategory, SubjectTag } from '../lib/types';
 import { telemetryStore } from '../lib/telemetryStore';
-import { BookOpen, Sparkles, Clock, Tag } from 'lucide-react';
+import { BookOpen, Sparkles, Clock, Tag, X } from 'lucide-react';
 
 export interface QuickLogModalProps {
   isOpen: boolean;
@@ -103,17 +103,17 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
           <div className="flex items-center gap-2.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#A3E635] shadow-[0_0_10px_#A3E635]" />
             <h2 className="text-base font-bold tracking-tight text-white">
-              Log Telemetry Block
+              Log Session
             </h2>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Tab Switcher with prominent high-contrast active styling */}
+            {/* Tab Switcher with 150ms transitions */}
             <div className="p-1 bg-[#08080A] rounded-2xl border border-white/10 flex text-xs">
               <button
                 type="button"
                 onClick={() => setMode('quick')}
-                className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all duration-150 ${
                   mode === 'quick'
                     ? 'bg-[#A3E635] text-black shadow-[0_0_12px_rgba(163,230,53,0.35)]'
                     : 'text-zinc-400 hover:text-white'
@@ -124,7 +124,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
               <button
                 type="button"
                 onClick={() => setMode('manual')}
-                className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-xl font-semibold transition-all duration-150 ${
                   mode === 'manual'
                     ? 'bg-[#A3E635] text-black shadow-[0_0_12px_rgba(163,230,53,0.35)]'
                     : 'text-zinc-400 hover:text-white'
@@ -136,9 +136,10 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
 
             <button
               onClick={onClose}
-              className="text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
+              className="text-zinc-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors duration-150"
+              title="Close modal"
             >
-              ✕
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>

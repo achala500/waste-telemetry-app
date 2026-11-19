@@ -510,10 +510,11 @@ class TelemetryStoreManager {
       label = matchDuration[3].trim();
     }
 
-    // Determine category heuristically
+    // Determine category and subject heuristically
     const lower = label.toLowerCase();
     let category: BlockCategory = 'focus';
-    let tag = 'Work';
+    let tag = 'Study';
+    let subject: SubjectTag | undefined = undefined;
 
     if (
       lower.includes('reels') ||
@@ -539,6 +540,19 @@ class TelemetryStoreManager {
     ) {
       category = 'routine';
       tag = 'Personal';
+    } else {
+      // Focus Subject Heuristics: Physics takes priority over generic Revision
+      if (lower.includes('physics')) {
+        subject = 'Physics';
+      } else if (lower.includes('math') || lower.includes('combined')) {
+        subject = 'Combined Maths';
+      } else if (lower.includes('chemistry') || lower.includes('chem')) {
+        subject = 'Chemistry';
+      } else if (lower.includes('past paper') || lower.includes('drill')) {
+        subject = 'Past Paper';
+      } else if (lower.includes('revision') || lower.includes('theory')) {
+        subject = 'Revision';
+      }
     }
 
     const now = new Date();
@@ -552,6 +566,7 @@ class TelemetryStoreManager {
       label,
       category,
       tag,
+      subject,
       source: 'manual'
     });
   };
@@ -1058,7 +1073,19 @@ class TelemetryStoreManager {
     this.state.blocks.forEach(b => {
       if (b.category === 'focus') {
         totalFocusMins += b.durationMinutes;
-        const subj = b.subject || (b.tag === 'Study' ? 'Revision' : 'Other');
+        const lowerLabel = (b.label || b.title || '').toLowerCase();
+        
+        let subj = b.subject;
+        // Priority check: Physics > Maths > Chemistry > Past Paper > Revision
+        if (!subj) {
+          if (lowerLabel.includes('physics')) subj = 'Physics';
+          else if (lowerLabel.includes('math') || lowerLabel.includes('combined')) subj = 'Combined Maths';
+          else if (lowerLabel.includes('chem')) subj = 'Other';
+          else if (lowerLabel.includes('past paper') || lowerLabel.includes('paper')) subj = 'Past Paper';
+          else if (lowerLabel.includes('revision') || b.tag === 'Study') subj = 'Revision';
+          else subj = 'Other';
+        }
+
         if (subj in subjectMap) {
           subjectMap[subj] += b.durationMinutes;
         } else {
@@ -1152,7 +1179,8 @@ class TelemetryStoreManager {
       d.setDate(base.getDate() - dayOffset);
       const dateStr = d.toISOString().split('T')[0];
       const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-      const dayIdx = 6 - dayOffset;
+      // Use true Day of Week index (0 = Sun, 1 = Mon, 2 = Tue, 3 = Wed, 4 = Thu, 5 = Fri, 6 = Sat)
+      const dayOfWeekIdx = d.getDay();
 
       const dayBlocks = this.state.blocks.filter(b => b.startTime.startsWith(dateStr));
 
@@ -1165,7 +1193,7 @@ class TelemetryStoreManager {
 
         dayBlocks.forEach(b => {
           const blockDate = new Date(b.startTime);
-          const blockHour = blockDate.getHours();
+          const blockHour = !isNaN(blockDate.getTime()) ? blockDate.getHours() : parseInt(b.startTime.split(':')[0] || '14', 10);
           if (blockHour === hour) {
             if (b.category === 'wasted') wastedMins += b.durationMinutes;
             if (b.category === 'focus') focusMins += b.durationMinutes;
@@ -1185,7 +1213,7 @@ class TelemetryStoreManager {
         else if (total > 0) intensity = 1;
 
         cells.push({
-          dayIndex: dayIdx,
+          dayIndex: dayOfWeekIdx,
           dayName,
           hour,
           hourLabel,

@@ -81,23 +81,40 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
                       const cell = heatmapData.find((c) => c.dayIndex === dayIdx && c.hour === h);
                       const wasted = cell?.wastedMinutes || 0;
                       const focus = cell?.focusMinutes || 0;
+                      const hasBoth = focus > 0 && wasted > 0;
 
                       return (
                         <div
                           key={dayIdx}
                           onClick={() => setSelectedHour(h)}
-                          className={`h-8 rounded-xl border flex items-center justify-center text-[10px] font-bold cursor-pointer transition-all hover:scale-105 ${
-                            wasted > 30
+                          className={`h-8 rounded-xl border flex items-center justify-center text-[10px] font-bold cursor-pointer transition-all hover:scale-105 overflow-hidden ${
+                            hasBoth
+                              ? 'bg-gradient-to-r from-[#A3E635]/20 to-rose-500/25 border-white/20'
+                              : wasted > 30
                               ? 'bg-rose-500/30 border-rose-500/50 text-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
                               : wasted > 0
                               ? 'bg-[#FB923C]/20 border-[#FB923C]/30 text-[#FB923C]'
                               : focus > 30
                               ? 'bg-[#A3E635]/20 border-[#A3E635]/30 text-[#A3E635]'
+                              : focus > 0
+                              ? 'bg-[#A3E635]/10 border-[#A3E635]/20 text-[#A3E635]'
                               : 'bg-white/5 border-white/5 text-zinc-600'
                           }`}
-                          title={`${hourStr} on ${days[dayIdx]}: ${wasted}m wasted, ${focus}m focus`}
+                          title={`${hourStr} on ${days[dayIdx]}: ${focus}m study & ${wasted}m distraction`}
                         >
-                          {wasted > 0 ? `${wasted}m` : focus > 0 ? `${focus}m` : ''}
+                          {hasBoth ? (
+                            <div className="flex items-center gap-0.5 px-1 leading-none">
+                              <span className="text-[#A3E635]">{focus}m</span>
+                              <span className="text-zinc-500 text-[8px]">/</span>
+                              <span className="text-rose-300">{wasted}m</span>
+                            </div>
+                          ) : wasted > 0 ? (
+                            `${wasted}m`
+                          ) : focus > 0 ? (
+                            `${focus}m`
+                          ) : (
+                            ''
+                          )}
                         </div>
                       );
                     })}
@@ -112,7 +129,11 @@ export const HeatmapView: React.FC<HeatmapViewProps> = ({ heatmapData, weeklyDat
         <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-white/5 text-xs text-zinc-400">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-md bg-[#A3E635]/20 border border-[#A3E635]/40" />
-            <span>Deep Focus Block</span>
+            <span>Study Session</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-md bg-gradient-to-r from-[#A3E635]/30 to-rose-500/30 border border-white/20" />
+            <span>Split Study &amp; Distraction</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-md bg-[#FB923C]/20 border border-[#FB923C]/40" />

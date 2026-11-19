@@ -55,11 +55,11 @@ const config: Config = {
       fontFamily: {
         sans: [
           'SF Pro Display',
+          'SF Pro Text',
           '-apple-system',
           'BlinkMacSystemFont',
-          'Inter',
-          'Segoe UI',
-          'Roboto',
+          'Google Sans',
+          'Product Sans',
           'sans-serif',
         ],
         mono: [

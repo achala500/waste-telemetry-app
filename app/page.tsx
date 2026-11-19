@@ -14,7 +14,6 @@ import { QuickLogModal } from '@/components/QuickLogModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import { AuthModal } from '@/components/AuthModal';
 import { submitFeedbackTicket } from '@/lib/feedbackService';
-import { MessageSquare } from 'lucide-react';
 
 export default function ChronoApp() {
   const state = useTelemetryStore();
@@ -184,16 +183,6 @@ export default function ChronoApp() {
           )}
         </main>
       </div>
-
-      {/* Floating Share Feedback Button */}
-      <button
-        onClick={() => setIsFeedbackOpen(true)}
-        className="fixed bottom-20 md:bottom-6 right-6 z-30 flex items-center gap-2 px-3.5 py-2.5 rounded-full bg-[#141416] hover:bg-[#1f1f23] border border-white/10 text-xs font-semibold text-zinc-300 hover:text-white shadow-2xl transition-all active:scale-95"
-        title="Share Feedback & Report Issues"
-      >
-        <MessageSquare className="w-4 h-4 text-[#A3E635]" />
-        <span className="hidden sm:inline">Share Feedback</span>
-      </button>
 
       {/* Quick Log Modal */}
       <QuickLogModal

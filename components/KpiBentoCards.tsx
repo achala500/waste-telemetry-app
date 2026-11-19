@@ -262,7 +262,7 @@ export const KpiBentoCards: React.FC<KpiBentoCardsProps> = ({ metrics, onGoalCha
             <p className="text-xs text-zinc-400 mt-1">
               {metrics.deepSessionCount > 0
                 ? '45m+ unbroken study blocks'
-                : 'Complete a 45m+ session to activate node 1'}
+                : 'Complete a 45m+ session to unlock your first streak badge'}
             </p>
           </div>
 
@@ -301,7 +301,7 @@ export const KpiBentoCards: React.FC<KpiBentoCardsProps> = ({ metrics, onGoalCha
             </div>
             <p className="text-xs text-zinc-400 mt-1">
               {metrics.wastedMinutes > 0
-                ? `${metrics.wakingLeakPercentage}% of 16h waking day leaked`
+                ? `${metrics.wakingLeakPercentage}% of today spent distracted`
                 : 'Zero distraction time recorded'}
             </p>
           </div>
@@ -346,32 +346,37 @@ export const KpiBentoCards: React.FC<KpiBentoCardsProps> = ({ metrics, onGoalCha
             </p>
           </div>
 
-          {/* Circular iOS App Badges with tooltips & active highlight */}
-          <div className="flex items-center gap-2 pt-1">
-            {(['Instagram', 'YouTube', 'TikTok', 'X', 'Reddit'] as const).map((app) => {
-              const minutes = distractionAppMap[app] || 0;
+          {/* Labeled App Badges with Tooltips & Active Highlights */}
+          <div className="flex items-center gap-1.5 pt-1">
+            {([
+              { key: 'Instagram', label: 'IG', color: '#E1306C' },
+              { key: 'YouTube', label: 'YT', color: '#FF0000' },
+              { key: 'TikTok', label: 'TT', color: '#25F4EE' },
+              { key: 'X', label: 'X', color: '#FFFFFF' },
+              { key: 'Reddit', label: 'RD', color: '#FF4500' }
+            ] as const).map(({ key, label: badgeLabel, color }) => {
+              const minutes = distractionAppMap[key] || 0;
               const isActive = minutes > 0;
-              const shortLetter = app === 'YouTube' ? 'Y' : app === 'TikTok' ? 'T' : app === 'Instagram' ? 'I' : app === 'Reddit' ? 'R' : 'X';
 
               return (
                 <div
-                  key={app}
-                  className="relative group"
+                  key={key}
+                  className="relative group flex-1"
                 >
                   <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all cursor-default ${
+                    className={`h-7 rounded-xl flex items-center justify-center text-[10px] font-bold transition-all cursor-default ${
                       isActive
-                        ? 'bg-rose-500/20 border-2 border-rose-500 text-rose-200 shadow-[0_0_8px_rgba(244,63,94,0.4)] scale-105'
-                        : 'bg-white/5 border border-white/10 text-zinc-500'
+                        ? 'bg-rose-500/25 border-2 border-rose-500 text-white shadow-[0_0_8px_rgba(244,63,94,0.4)] scale-105'
+                        : 'bg-white/5 border border-white/10 text-zinc-500 hover:text-zinc-300'
                     }`}
                   >
-                    {shortLetter}
+                    <span>{badgeLabel}</span>
                   </div>
 
                   {/* Tactile Tooltip */}
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex flex-col items-center pointer-events-none z-30">
                     <div className="px-2 py-1 rounded-lg bg-[#08080A] border border-white/20 text-[10px] font-semibold text-white whitespace-nowrap shadow-xl">
-                      {app}: {minutes > 0 ? `${minutes}m lost` : '0m clean'}
+                      {key}: {minutes > 0 ? `${minutes}m lost` : '0m clean'}
                     </div>
                   </div>
                 </div>

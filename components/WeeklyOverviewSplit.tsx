@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { Sparkles, RefreshCw, AlertCircle, ArrowUpRight, Flame } from 'lucide-react';
+import { Sparkles, RefreshCw, AlertCircle, ArrowUpRight, Flame, Brain, Lightbulb } from 'lucide-react';
 import { DayActivitySummary, AiInsight, HeatmapCell } from '@/lib/types';
 import { telemetryStore } from '@/lib/telemetryStore';
 
@@ -28,10 +28,17 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
   const [selectedLens, setSelectedLens] = useState<'all' | 'leak' | 'spiral' | 'reclaim'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Auto-fetch insights on mount if logs >= 3 and insights empty
+  useEffect(() => {
+    if (totalLogsCount >= 3 && insights.length === 0) {
+      telemetryStore.fetchAiInsights();
+    }
+  }, [totalLogsCount, insights.length]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await telemetryStore.refreshInsights();
-    setTimeout(() => setIsRefreshing(false), 600);
+    setTimeout(() => setIsRefreshing(false), 500);
   };
 
   const chartData = weeklyData.map((d) => ({
@@ -42,11 +49,15 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
 
   const filteredInsights = insights.filter((ins) => {
     if (selectedLens === 'all') return true;
-    if (selectedLens === 'leak') return ins.type === 'leak_window';
-    if (selectedLens === 'spiral') return ins.type === 'spiral_chain';
-    if (selectedLens === 'reclaim') return ins.type === 'reclaim_forecast';
+    const type = (ins.type || '').toLowerCase();
+    const title = (ins.title || '').toLowerCase();
+    if (selectedLens === 'leak') return type.includes('leak') || title.includes('leak') || title.includes('peak') || title.includes('window');
+    if (selectedLens === 'spiral') return type.includes('spiral') || title.includes('spiral') || title.includes('trigger') || title.includes('friction') || title.includes('distraction');
+    if (selectedLens === 'reclaim') return type.includes('reclaim') || title.includes('reclaim') || title.includes('forecast') || title.includes('capacity');
     return true;
   });
+
+  const displayInsights = filteredInsights.length > 0 ? filteredInsights : insights;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -106,8 +117,8 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
           ) : (
             <div className="pt-2">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-zinc-400">7x18 Hourly Activity Matrix (06:00 – 23:00)</p>
-                <span className="text-[11px] text-zinc-500 font-medium">y-axis: 06:00 to 23:00</span>
+                <p className="text-xs text-zinc-400 font-medium">Weekly Study & Distraction Heatmap</p>
+                <span className="text-[11px] text-zinc-500 font-medium">06:00 – 23:00</span>
               </div>
               <div className="overflow-x-auto max-h-72 pr-1 scrollbar-thin">
                 <div className="min-w-[480px]">
@@ -250,15 +261,15 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
                   Insights analyze your real focus habits to identify peak productivity windows.
                 </p>
               </div>
-            ) : filteredInsights.length === 0 ? (
+            ) : displayInsights.length === 0 ? (
               <div className="text-xs text-zinc-500 text-center py-6">
-                No insights found for this lens.
+                Analyzing session telemetry...
               </div>
             ) : (
-              filteredInsights.map((ins) => (
+              displayInsights.map((ins) => (
                 <div
                   key={ins.id}
-                  className="bg-[#08080A] border border-white/10 rounded-2xl p-4 space-y-2"
+                  className="bg-[#08080A] border border-white/10 rounded-2xl p-4 space-y-2 hover:border-white/20 transition-colors"
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-white">{ins.title}</span>
@@ -270,8 +281,9 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
                   </div>
                   <p className="text-xs text-zinc-300 leading-relaxed">{ins.description}</p>
                   {ins.actionableRecommendation && (
-                    <div className="text-[11px] text-[#A3E635] bg-[#A3E635]/5 border border-[#A3E635]/15 rounded-xl p-2.5">
-                      💡 {ins.actionableRecommendation}
+                    <div className="text-[11px] text-[#A3E635] bg-[#A3E635]/5 border border-[#A3E635]/15 rounded-xl p-2.5 flex items-start gap-1.5">
+                      <Lightbulb className="w-3.5 h-3.5 text-[#A3E635] shrink-0 mt-0.5" />
+                      <span>{ins.actionableRecommendation}</span>
                     </div>
                   )}
                 </div>

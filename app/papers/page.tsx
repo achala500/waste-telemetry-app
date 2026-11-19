@@ -47,11 +47,13 @@ export default function PastPapersPage() {
 
   // Upload modal state
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadSubject, setUploadSubject] = useState<PastPaperItem['subject']>('Combined Maths');
   const [uploadYear, setUploadYear] = useState<number>(2024);
   const [uploadType, setUploadType] = useState<PastPaperItem['examType']>('A/L National');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadAnonymous, setUploadAnonymous] = useState(false);
   const [startForumThread, setStartForumThread] = useState(true);
   const [forumPromptText, setForumPromptText] = useState('');
   const [uploading, setUploading] = useState(false);
@@ -109,13 +111,13 @@ export default function PastPapersPage() {
       setUploadError('Please select a PDF document.');
       return;
     }
-    if (!storeState.user?.email) {
-      setIsAuthOpen(true);
-      return;
-    }
 
     setUploading(true);
     setUploadError(null);
+
+    const isAnon = uploadAnonymous || !storeState.user?.email;
+    const uploaderEmail = isAnon ? 'anonymous@student.local' : storeState.user!.email;
+    const uploaderName = isAnon ? 'Anonymous Student' : (storeState.user!.displayName || 'Student');
 
     const paperTitle = uploadTitle.trim() || uploadFile.name.replace(/\.pdf$/i, '');
     const res = await uploadQuarantinedPaper(uploadFile, {
@@ -123,16 +125,16 @@ export default function PastPapersPage() {
       subject: uploadSubject,
       year: uploadYear,
       examType: uploadType,
-      uploaderEmail: storeState.user.email,
-      uploaderName: storeState.user.displayName || 'Student'
+      uploaderEmail,
+      uploaderName
     });
 
     if (res.success && startForumThread && res.paper) {
       await createForumPost({
         paperId: res.paper.id,
         paperTitle: res.paper.title,
-        authorEmail: storeState.user.email,
-        authorName: storeState.user.displayName || 'Student',
+        authorEmail: uploaderEmail,
+        authorName: uploaderName,
         subject: uploadSubject,
         title: `Discussion & Solutions: ${paperTitle}`,
         content: forumPromptText.trim() || `Discussing questions, solutions, and marking tips for ${paperTitle}.`
@@ -229,7 +231,7 @@ export default function PastPapersPage() {
               rel="noopener noreferrer"
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-zinc-300 hover:text-white transition-colors"
             >
-              <span>Google Drive Folder</span>
+              <span>Open Drive Folder</span>
               <ExternalLink className="w-3.5 h-3.5 text-zinc-400" />
             </a>
 
@@ -377,7 +379,7 @@ export default function PastPapersPage() {
                       className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-white inline-flex items-center gap-1.5"
                     >
                       <ExternalLink className="w-4 h-4 text-zinc-400" />
-                      <span>Open Drive Vault</span>
+                      <span>Open Drive Folder</span>
                     </a>
                   </div>
                 </div>
@@ -426,10 +428,10 @@ export default function PastPapersPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="py-2 px-3 rounded-xl bg-[#A3E635]/10 hover:bg-[#A3E635]/20 text-[#A3E635] border border-[#A3E635]/30 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
-                          title="Open Drive Link"
+                          title="Open Drive Folder"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>Drive</span>
+                          <span>Open Drive Folder</span>
                         </a>
                       </div>
                     </div>
@@ -660,7 +662,7 @@ export default function PastPapersPage() {
                   className="px-3 py-1.5 rounded-xl bg-[#A3E635] text-black font-semibold text-xs flex items-center gap-1.5"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  <span>Drive</span>
+                  <span>Open Drive Folder</span>
                 </a>
                 <button
                   onClick={() => setPreviewPaper(null)}
@@ -763,17 +765,88 @@ export default function PastPapersPage() {
                   </div>
                 </div>
 
+                {/* Drag and Drop PDF Dropzone */}
                 <div>
-                  <label className="text-xs text-zinc-400 font-medium block mb-1">PDF Document (Max 25 MB):</label>
+                  <label className="text-xs text-zinc-400 font-medium block mb-1.5">PDF Document (Max 25 MB):</label>
+                  {!uploadFile ? (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDragging(true);
+                      }}
+                      onDragLeave={() => setIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+                            setUploadError('Only valid .pdf documents are supported.');
+                            return;
+                          }
+                          setUploadFile(file);
+                          setUploadError(null);
+                        }
+                      }}
+                      className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+                        isDragging
+                          ? 'border-[#A3E635] bg-[#A3E635]/10 scale-[1.01]'
+                          : 'border-white/15 bg-[#08080A] hover:border-white/30 hover:bg-white/[0.02]'
+                      }`}
+                      onClick={() => document.getElementById('pdf-file-input')?.click()}
+                    >
+                      <input
+                        id="pdf-file-input"
+                        type="file"
+                        accept="application/pdf"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                      <UploadCloud className={`w-8 h-8 mx-auto mb-2 transition-colors ${isDragging ? 'text-[#A3E635]' : 'text-zinc-500'}`} />
+                      <p className="text-xs font-semibold text-white">
+                        {isDragging ? 'Drop your PDF here' : 'Click to select or drag & drop PDF here'}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 mt-1">
+                        Strict %PDF- binary header validation & quarantine security check
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-2xl bg-[#08080A] border border-[#A3E635]/30 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-[#A3E635]/15 border border-[#A3E635]/30 flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4 text-[#A3E635]" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-white truncate">{uploadFile.name}</p>
+                          <p className="text-[10px] text-zinc-400">
+                            {(uploadFile.size / (1024 * 1024)).toFixed(2)} MB • Ready for inspection
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setUploadFile(null)}
+                        className="p-1 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 shrink-0"
+                        title="Remove file"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Anonymous Upload Checkbox */}
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-[#08080A] border border-white/5">
                   <input
-                    type="file"
-                    accept="application/pdf"
-                    onChange={handleFileChange}
-                    className="w-full bg-[#08080A] border border-white/10 rounded-xl px-3 py-2 text-xs text-zinc-300 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#A3E635] file:text-black hover:file:bg-[#86efac] cursor-pointer"
+                    type="checkbox"
+                    id="anon-upload-check"
+                    checked={uploadAnonymous}
+                    onChange={(e) => setUploadAnonymous(e.target.checked)}
+                    className="accent-[#A3E635] rounded cursor-pointer"
                   />
-                  <p className="text-[10px] text-zinc-500 mt-1">
-                    Enforces strict %PDF- header byte inspection and malware quarantine.
-                  </p>
+                  <label htmlFor="anon-upload-check" className="text-xs text-zinc-300 cursor-pointer select-none">
+                    Upload anonymously (hide Google profile from public forum & archive)
+                  </label>
                 </div>
 
                 {/* Forum Integration Checkbox */}

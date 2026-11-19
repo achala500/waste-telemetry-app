@@ -105,17 +105,21 @@ export async function uploadQuarantinedPaper(
     subject: PastPaperItem['subject'];
     year: number;
     examType: PastPaperItem['examType'];
-    uploaderEmail: string;
-    uploaderName: string;
+    uploaderEmail?: string;
+    uploaderName?: string;
   }
 ): Promise<{ success: boolean; error?: string; paper?: PastPaperItem }> {
+  // Support Anonymous uploads
+  const effectiveEmail = (metadata.uploaderEmail || '').trim() || 'anonymous@student.local';
+  const effectiveName = (metadata.uploaderName || '').trim() || 'Anonymous Student';
+
   // 1. Ban check
-  if (isUserBanned(metadata.uploaderEmail)) {
-    return { success: false, error: 'Your account has been restricted from uploading papers.' };
+  if (isUserBanned(effectiveEmail)) {
+    return { success: false, error: 'Your account or IP has been restricted from uploading papers.' };
   }
 
-  // 2. Rate limit check
-  const rateLimit = checkUserUploadRateLimit(metadata.uploaderEmail);
+  // 2. Rate limit check (3 uploads/day per client/email)
+  const rateLimit = checkUserUploadRateLimit(effectiveEmail);
   if (!rateLimit.allowed) {
     return { success: false, error: 'Daily upload limit reached (3 papers/day). Please try again tomorrow.' };
   }
@@ -137,7 +141,11 @@ export async function uploadQuarantinedPaper(
     return { success: false, error: 'Security verification failed: File header is not a valid PDF (%PDF- missing).' };
   }
 
-  // Convert to Blob URL or data URI for in-app preview
+  // 6. Encode and sanitize file name
+  const rawBaseName = file.name.replace(/\.pdf$/i, '').trim().replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const encodedFileName = encodeURIComponent(rawBaseName) + '_' + Date.now() + '.pdf';
+
+  // Convert to local client storage URL (remains on client drive until admin approval)
   let previewUrl = '';
   try {
     previewUrl = URL.createObjectURL(file);
@@ -146,20 +154,20 @@ export async function uploadQuarantinedPaper(
   const paperId = `paper_quarantine_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
   const paper: PastPaperItem = {
     id: paperId,
-    title: metadata.title.trim(),
+    title: metadata.title.trim() || rawBaseName,
     subject: metadata.subject,
     year: metadata.year,
     examType: metadata.examType,
     downloadUrl: previewUrl || '#',
     previewUrl: previewUrl || undefined,
     fileSizeBytes: file.size,
-    uploaderEmail: metadata.uploaderEmail,
-    uploaderName: metadata.uploaderName,
+    uploaderEmail: effectiveEmail,
+    uploaderName: effectiveName,
     status: 'quarantined',
     uploadedAt: new Date().toISOString()
   };
 
-  // Save to Quarantined collection
+  // Save to Quarantined collection (staged in client storage)
   try {
     const existing: PastPaperItem[] = JSON.parse(localStorage.getItem('chrono_quarantine_papers') || '[]');
     localStorage.setItem('chrono_quarantine_papers', JSON.stringify([paper, ...existing]));
@@ -176,6 +184,7 @@ export async function uploadQuarantinedPaper(
         fields: {
           id: { stringValue: paper.id },
           title: { stringValue: paper.title },
+          encodedFileName: { stringValue: encodedFileName },
           subject: { stringValue: paper.subject },
           year: { integerValue: paper.year },
           examType: { stringValue: paper.examType },
@@ -183,13 +192,14 @@ export async function uploadQuarantinedPaper(
           uploaderName: { stringValue: paper.uploaderName || '' },
           fileSizeBytes: { integerValue: paper.fileSizeBytes || 0 },
           status: { stringValue: 'quarantined' },
+          storageLocation: { stringValue: 'client_staged' },
           uploadedAt: { stringValue: paper.uploadedAt }
         }
       })
     });
   } catch {}
 
-  incrementUserUploadCount(metadata.uploaderEmail);
+  incrementUserUploadCount(effectiveEmail);
 
   return { success: true, paper };
 }
@@ -231,6 +241,9 @@ export async function approveQuarantinedPaper(paperId: string): Promise<boolean>
     if (!target) return false;
 
     target.status = 'approved';
+    if (!target.downloadUrl || target.downloadUrl === '#' || target.downloadUrl.startsWith('blob:')) {
+      target.downloadUrl = `https://drive.google.com/drive/folders/${DEFAULT_DRIVE_FOLDER_ID}`;
+    }
 
     // Remove from quarantine
     const remaining = quarantined.filter((p) => p.id !== paperId);
