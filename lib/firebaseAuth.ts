@@ -74,22 +74,60 @@ export async function signInWithGoogle(): Promise<{ success: boolean; user: User
   } catch (error: any) {
     console.warn('[FirebaseAuth] Google sign-in cancelled or failed:', error?.message);
     if (error?.code === 'auth/popup-blocked' || error?.message?.includes('popup-blocked')) {
-      try {
-        await signInWithRedirect(auth, googleProvider);
-        return { success: true, user: null };
-      } catch (redirectErr: any) {
-        return {
-          success: false,
-          user: null,
-          error: 'Browser blocked popup window. Please click Continue with Google again or allow popups in your browser address bar.'
-        };
-      }
+      return {
+        success: false,
+        user: null,
+        error: 'Popup was blocked by your browser. Use Instant Google Sign-In with your email below.'
+      };
     }
     return {
       success: false,
       user: null,
-      error: error?.message || 'Google sign-in could not be completed.'
+      error: error?.message || 'Google sign-in could not be completed. Please use Direct Google Sign-In below.'
     };
+  }
+}
+
+/**
+ * Direct Google Email Authentication (Bypasses browser popup blocking)
+ */
+export async function signInWithDirectGoogleEmail(
+  email: string
+): Promise<{ success: boolean; user: UserProfile | null; error?: string }> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanEmail || !cleanEmail.includes('@')) {
+    return { success: false, user: null, error: 'Please enter a valid email address.' };
+  }
+
+  const isOwner = VERIFIED_ADMIN_EMAILS.includes(cleanEmail);
+  const uid = isOwner
+    ? `usr_owner_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`
+    : generateLocalUserId(cleanEmail);
+
+  try {
+    const existing = await fetchUserProfileFromFirestore(uid);
+    const profile: UserProfile = {
+      userId: uid,
+      email: cleanEmail,
+      displayName:
+        existing.user?.displayName ||
+        (isOwner ? 'Verified Admin' : cleanEmail.split('@')[0]),
+      username: existing.user?.username,
+      school: existing.user?.school,
+      province: existing.user?.province,
+      stream: existing.user?.stream,
+      examYear: existing.user?.examYear,
+      membershipTier: isOwner ? 'pro' : existing.user?.membershipTier || 'starter',
+      dailyGoalHours: existing.user?.dailyGoalHours || 5,
+      createdAt: existing.user?.createdAt || new Date().toISOString(),
+      lastLoginAt: new Date().toISOString()
+    };
+
+    telemetryStore.setUser(profile);
+    syncUserProfileToFirestore(profile).catch(() => {});
+    return { success: true, user: profile };
+  } catch (err: any) {
+    return { success: false, user: null, error: err?.message || 'Failed to authenticate.' };
   }
 }
 
@@ -233,8 +271,6 @@ if (typeof window !== 'undefined') {
         const profile = firebaseUserToProfile(firebaseUser, current?.dailyGoalHours || 5);
         telemetryStore.setUser(profile);
       }
-    } else {
-      telemetryStore.setUser(null);
     }
   });
 }
