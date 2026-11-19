@@ -142,18 +142,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const handleQuickDemo = () => {
-    const demoUser: UserProfile = {
-      userId: 'usr-omni-pro',
-      email: 'alex.vance@omnitelemetry.io',
-      displayName: 'Alex Vance',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=256&q=80',
-      dailyGoalHours: 6,
-      createdAt: '2026-01-10T10:00:00.000Z',
+  const handleStudentSignIn = () => {
+    const studentUser: UserProfile = {
+      userId: 'usr_student_' + Date.now(),
+      email: 'achala500@gmail.com',
+      displayName: 'Achala',
+      dailyGoalHours: 5,
+      createdAt: new Date().toISOString(),
       lastLoginAt: new Date().toISOString()
     };
-    telemetryStore.setUser(demoUser);
-    setSuccessMsg('Signed in as Alex Vance (Demo Profile)');
+    telemetryStore.setUser(studentUser);
+    setSuccessMsg('Signed in as Achala');
     setTimeout(() => onClose(), 600);
   };
 
@@ -204,11 +203,40 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
 
         {/* Notifications Banners */}
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="flex-1">{errorMsg}</span>
+          <div className="mx-6 mt-4 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs space-y-2.5">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="flex-1 font-medium">{errorMsg}</span>
+            </div>
+            {errorMsg.includes('configuration-not-found') && (
+              <div className="pt-2 border-t border-rose-500/20 space-y-2">
+                <p className="text-[11px] text-zinc-300">
+                  Firebase Authentication is pending sign-in method setup in Firebase Console. Continue in Local Student mode:
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const localUser: UserProfile = {
+                      userId: 'usr_local_' + Date.now(),
+                      email: (email.trim() || 'achala500@gmail.com'),
+                      displayName: (displayName.trim() || (email ? email.split('@')[0] : 'Achala')),
+                      dailyGoalHours: dailyGoalHours || 5,
+                      createdAt: new Date().toISOString(),
+                      lastLoginAt: new Date().toISOString()
+                    };
+                    telemetryStore.setUser(localUser);
+                    setSuccessMsg(`Signed in as ${localUser.displayName}!`);
+                    setErrorMsg(null);
+                    setTimeout(() => onClose(), 600);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-[#A3E635] text-black font-semibold text-xs hover:bg-[#86efac] active:scale-95 transition-all shadow-md"
+                >
+                  Continue as {email.trim() || 'Achala'} (Local Mode)
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -505,15 +533,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               </button>
             </form>
 
-            {/* Quick Demo Login Pill for Instant Testing */}
+            {/* Instant Student Sign-In */}
             <div className="pt-2 border-t border-white/[0.05] flex items-center justify-between text-xs">
-              <span className="text-zinc-500 text-[11px]">Testing demo?</span>
+              <span className="text-zinc-500 text-[11px]">Instant access?</span>
               <button
                 type="button"
-                onClick={handleQuickDemo}
-                className="text-[11px] font-mono text-[#38BDF8] hover:underline flex items-center gap-1"
+                onClick={handleStudentSignIn}
+                className="text-[11px] text-[#A3E635] hover:underline flex items-center gap-1 font-semibold"
               >
-                <span>⚡ 1-Click Demo Login</span>
+                <span>⚡ Sign in as Achala (Instant)</span>
               </button>
             </div>
           </div>

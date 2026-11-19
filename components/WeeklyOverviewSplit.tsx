@@ -60,9 +60,9 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
   const displayInsights = filteredInsights.length > 0 ? filteredInsights : insights;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      {/* Left 60% Column: Weekly Overview & Heatmap */}
-      <div className="lg:col-span-7 bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col justify-between bento-surface">
+    <div className="w-full">
+      {/* Weekly Overview & Heatmap */}
+      <div className="bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col justify-between bento-surface">
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
@@ -187,115 +187,6 @@ export const WeeklyOverviewSplit: React.FC<WeeklyOverviewSplitProps> = ({
             <span>Distraction & Wasted</span>
           </div>
         </div>
-      </div>
-
-      {/* Right 40% Column: Personal AI Coach */}
-      <div className="lg:col-span-5 bg-[#141416] border border-white/10 rounded-3xl p-6 shadow-xl flex flex-col justify-between bento-surface">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-[#A3E635]/10 border border-[#A3E635]/30 flex items-center justify-center text-[#A3E635]">
-                <Sparkles className="w-3.5 h-3.5" />
-              </div>
-              <div>
-                <h2 className="text-base font-bold text-white tracking-tight">Personal AI Coach</h2>
-                <p className="text-[11px] text-zinc-400">Powered by Gemini 3.8 Flash</p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs text-zinc-300 hover:text-white transition-all disabled:opacity-50 btn-tactile active:scale-[0.97]"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-              <span>Refresh Insights</span>
-            </button>
-          </div>
-
-          {/* Lens Selector */}
-          <div className="grid grid-cols-4 gap-1.5 p-1 bg-[#08080A] border border-white/10 rounded-2xl my-3 text-xs">
-            <button
-              onClick={() => setSelectedLens('all')}
-              className={`py-1 rounded-xl font-medium tag-switcher-spring btn-tactile ${
-                selectedLens === 'all' ? 'bg-[#A3E635] text-black font-semibold shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              All
-            </button>
-            <button
-              onClick={() => setSelectedLens('leak')}
-              className={`py-1 rounded-xl font-medium tag-switcher-spring btn-tactile ${
-                selectedLens === 'leak' ? 'bg-[#A3E635] text-black font-semibold shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Leak Window
-            </button>
-            <button
-              onClick={() => setSelectedLens('spiral')}
-              className={`py-1 rounded-xl font-medium tag-switcher-spring btn-tactile ${
-                selectedLens === 'spiral' ? 'bg-[#A3E635] text-black font-semibold shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              Spiral Chain
-            </button>
-            <button
-              onClick={() => setSelectedLens('reclaim')}
-              className={`py-1 rounded-xl font-medium tag-switcher-spring btn-tactile ${
-                selectedLens === 'reclaim' ? 'bg-[#A3E635] text-black font-semibold shadow-sm' : 'text-zinc-400 hover:text-white'
-              }`}
-            >
-              30D Reclaim
-            </button>
-          </div>
-
-          {/* Insights Cards or Crisp Empty State */}
-          <div className="space-y-3 mt-3">
-            {totalLogsCount < 3 ? (
-              <div className="border-2 border-dashed border-white/10 rounded-2xl p-6 text-center space-y-2">
-                <AlertCircle className="w-6 h-6 text-zinc-500 mx-auto" />
-                <p className="text-xs text-zinc-300 font-semibold">
-                  Log at least 3 sessions to view personalized AI insights
-                </p>
-                <p className="text-[11px] text-zinc-500">
-                  Insights analyze your real focus habits to identify peak productivity windows.
-                </p>
-              </div>
-            ) : displayInsights.length === 0 ? (
-              <div className="text-xs text-zinc-500 text-center py-6">
-                Analyzing session telemetry...
-              </div>
-            ) : (
-              displayInsights.map((ins) => (
-                <div
-                  key={ins.id}
-                  className="bg-[#08080A] border border-white/10 rounded-2xl p-4 space-y-2 hover:border-white/20 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white">{ins.title}</span>
-                    {ins.highlight && (
-                      <span className="px-2 py-0.5 rounded-full bg-[#A3E635]/10 text-[#A3E635] text-[10px] font-semibold">
-                        {ins.highlight}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-zinc-300 leading-relaxed">{ins.description}</p>
-                  {ins.actionableRecommendation && (
-                    <div className="text-[11px] text-[#A3E635] bg-[#A3E635]/5 border border-[#A3E635]/15 rounded-xl p-2.5 flex items-start gap-1.5">
-                      <Lightbulb className="w-3.5 h-3.5 text-[#A3E635] shrink-0 mt-0.5" />
-                      <span>{ins.actionableRecommendation}</span>
-                    </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Footer Note */}
-        <p className="text-[11px] text-zinc-500 mt-4 border-t border-white/5 pt-3">
-          Trained on your real focus telemetry. Zero data sharing.
-        </p>
       </div>
     </div>
   );

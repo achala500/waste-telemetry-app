@@ -236,12 +236,35 @@ export interface FeedbackTicket {
   auditHistory: AuditRecord[];
 }
 
+export type ExamType =
+  | 'A/L National'
+  | 'Provincial'
+  | 'School Term Test'
+  | 'Model Paper'
+  | 'Marking Scheme'
+  | 'Resource Book'
+  | 'Short Notes'
+  | 'Class Tute / Handout'
+  | 'Unit Quiz'
+  | 'Formula Sheet'
+  | 'Other';
+
+export interface LeaderboardEntry {
+  rank: number;
+  displayName: string;
+  email: string;
+  totalFocusMinutes: number;
+  streakDays: number;
+  topSubject: string;
+  isLive: boolean;
+}
+
 export interface PastPaperItem {
   id: string;
   title: string;
   subject: 'Combined Maths' | 'Physics' | 'Chemistry' | 'Revision' | 'Other';
   year: number;
-  examType: 'A/L National' | 'Provincial' | 'Model Paper' | 'Marking Scheme';
+  examType: ExamType;
   driveFileId?: string;
   downloadUrl: string;
   previewUrl?: string;

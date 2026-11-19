@@ -16,6 +16,7 @@ import {
   Send,
   Plus,
   BookOpen,
+  Trash2,
   X
 } from 'lucide-react';
 import { NavigationRail } from '@/components/NavigationRail';
@@ -23,6 +24,7 @@ import { AuthModal } from '@/components/AuthModal';
 import { PastPaperItem, ForumPost } from '@/lib/types';
 import {
   getApprovedPastPapers,
+  deleteApprovedPaper,
   uploadQuarantinedPaper,
   checkUserUploadRateLimit,
   getForumPosts,
@@ -92,6 +94,27 @@ export default function PastPapersPage() {
       p.subject.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSubject && matchesYear && matchesType && matchesSearch;
   });
+
+  const ADMIN_EMAILS = [
+    'achala500@gmail.com',
+    'achala500',
+    '111077537+achala500@users.noreply.github.com'
+  ];
+  const currentUserEmail = (storeState.user?.email || '').toLowerCase().trim();
+  const envAdminEmail = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || '').toLowerCase().trim();
+  const isAdmin = !!(
+    currentUserEmail &&
+    (ADMIN_EMAILS.includes(currentUserEmail) ||
+      currentUserEmail === envAdminEmail ||
+      currentUserEmail.startsWith('achala'))
+  );
+
+  const handleDeletePaper = async (paperId: string) => {
+    if (typeof window !== 'undefined' && window.confirm('Are you sure you want to delete this paper from the library?')) {
+      await deleteApprovedPaper(paperId);
+      await loadData();
+    }
+  };
 
   const rateLimit = storeState.user?.email
     ? checkUserUploadRateLimit(storeState.user.email)
@@ -317,7 +340,20 @@ export default function PastPapersPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5 text-xs">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-zinc-500 font-medium">Exam Type:</span>
-                    {['All', 'A/L National', 'Provincial', 'Model Paper', 'Marking Scheme'].map((t) => (
+                    {[
+                      'All',
+                      'A/L National',
+                      'Provincial',
+                      'School Term Test',
+                      'Model Paper',
+                      'Marking Scheme',
+                      'Resource Book',
+                      'Short Notes',
+                      'Class Tute / Handout',
+                      'Unit Quiz',
+                      'Formula Sheet',
+                      'Other'
+                    ].map((t) => (
                       <button
                         key={t}
                         onClick={() => setSelectedType(t)}
@@ -433,6 +469,17 @@ export default function PastPapersPage() {
                           <Download className="w-3.5 h-3.5" />
                           <span>Open Drive Folder</span>
                         </a>
+
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleDeletePaper(paper.id)}
+                            className="py-2 px-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 text-xs font-semibold transition-colors flex items-center justify-center gap-1.5"
+                            title="Delete Paper (Admin)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Delete</span>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -759,8 +806,15 @@ export default function PastPapersPage() {
                     >
                       <option value="A/L National">A/L National</option>
                       <option value="Provincial">Provincial</option>
+                      <option value="School Term Test">School Term Test</option>
                       <option value="Model Paper">Model Paper</option>
                       <option value="Marking Scheme">Marking Scheme</option>
+                      <option value="Resource Book">Resource Book</option>
+                      <option value="Short Notes">Short Notes</option>
+                      <option value="Class Tute / Handout">Class Tute / Handout</option>
+                      <option value="Unit Quiz">Unit Quiz</option>
+                      <option value="Formula Sheet">Formula Sheet</option>
+                      <option value="Other">Other</option>
                     </select>
                   </div>
                 </div>

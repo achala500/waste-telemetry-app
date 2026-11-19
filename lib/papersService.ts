@@ -3,7 +3,7 @@
  * Connects to Google Drive Past Papers Folder with Anti-Virus Magic-Byte Quarantine & Admin Moderation.
  */
 
-import { PastPaperItem, ForumPost, ForumPostReply } from './types';
+import { PastPaperItem, ForumPost, ForumPostReply, ExamType } from './types';
 import { DEFAULT_FIRESTORE_CONFIG } from './firestoreSync';
 
 const PAPERS_COLLECTION = 'past_papers';
@@ -271,6 +271,28 @@ export async function rejectQuarantinedPaper(paperId: string): Promise<boolean> 
     try {
       const config = DEFAULT_FIRESTORE_CONFIG;
       const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/${QUARANTINE_COLLECTION}/${paperId}?key=${config.apiKey}`;
+      await fetch(url, { method: 'DELETE' });
+    } catch {}
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Admin Action: Delete Approved Paper
+ * Removes paper from localStorage 'chrono_approved_papers' and deletes from Firestore collection 'past_papers'.
+ */
+export async function deleteApprovedPaper(paperId: string): Promise<boolean> {
+  try {
+    const approved: PastPaperItem[] = JSON.parse(localStorage.getItem('chrono_approved_papers') || '[]');
+    const remaining = approved.filter((p) => p.id !== paperId);
+    localStorage.setItem('chrono_approved_papers', JSON.stringify(remaining));
+
+    try {
+      const config = DEFAULT_FIRESTORE_CONFIG;
+      const url = `https://firestore.googleapis.com/v1/projects/${config.projectId}/databases/(default)/documents/${PAPERS_COLLECTION}/${paperId}?key=${config.apiKey}`;
       await fetch(url, { method: 'DELETE' });
     } catch {}
 

@@ -3,25 +3,45 @@
 import React, { useState } from 'react';
 import { NavigationRail } from '@/components/NavigationRail';
 import { TopCommandBar } from '@/components/TopCommandBar';
-import { AiInsightsView } from '@/components/AiInsightsView';
+import { LeaderboardView } from '@/components/LeaderboardView';
 import { QuickLogModal } from '@/components/QuickLogModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
 import { AuthModal } from '@/components/AuthModal';
 import { useTelemetryStore, telemetryStore } from '@/lib/telemetryStore';
+import { submitFeedbackTicket } from '@/lib/feedbackService';
 
-export default function AiCoachPage() {
+export default function LeaderboardPage() {
   const state = useTelemetryStore();
   const [isLogModalOpen, setIsLogModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [prefilledTime, setPrefilledTime] = useState<string | undefined>();
 
   const currentDate = new Date(`${state.selectedDate}T00:00:00`);
   const metrics = telemetryStore.getDailyKpiMetrics(state.selectedDate);
 
+  const handleFeedbackSubmit = async (feedback: {
+    category: 'bug' | 'feature' | 'ux' | 'other';
+    description: string;
+    annotatedScreenshotUrl?: string;
+  }) => {
+    try {
+      await submitFeedbackTicket({
+        category: feedback.category,
+        description: feedback.description,
+        annotatedScreenshotUrl: feedback.annotatedScreenshotUrl,
+        userEmail: state.user?.email || undefined,
+        userName: state.user?.displayName || undefined
+      });
+    } catch {
+      // offline safe
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#08080A] text-zinc-100 flex flex-col md:flex-row font-sans selection:bg-[#A3E635] selection:text-black">
       <NavigationRail
-        activeView="insights"
+        activeView="leaderboard"
         syncStatus={state.isSyncing ? 'syncing' : state.isOnline ? 'live' : 'offline'}
         todayDistractionCount={metrics.distractionCount}
       />
@@ -35,7 +55,10 @@ export default function AiCoachPage() {
           onStartStopwatch={() => telemetryStore.startStopwatch()}
           onPauseStopwatch={() => telemetryStore.pauseStopwatch()}
           onDoneStopwatch={() => telemetryStore.stopAndSaveStopwatch()}
-          onOpenLogModal={() => setIsLogModalOpen(true)}
+          onOpenLogModal={() => {
+            setPrefilledTime(undefined);
+            setIsLogModalOpen(true);
+          }}
           scope={state.filterScope === '7d' ? '7d' : 'day'}
           onScopeChange={(scope) => telemetryStore.setFilterScope(scope)}
           currentDate={currentDate}
@@ -44,13 +67,7 @@ export default function AiCoachPage() {
         />
 
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 md:px-8 py-6 space-y-6">
-          <AiInsightsView
-            insights={state.insights}
-            blocks={state.blocks}
-            onRefreshInsights={async () => {
-              await telemetryStore.refreshInsights();
-            }}
-          />
+          <LeaderboardView />
         </main>
       </div>
 
@@ -58,6 +75,7 @@ export default function AiCoachPage() {
         isOpen={isLogModalOpen}
         onClose={() => setIsLogModalOpen(false)}
         selectedDate={state.selectedDate}
+        prefilledTime={prefilledTime}
         onSave={(block) => {
           telemetryStore.addBlock(block);
           setIsLogModalOpen(false);
@@ -67,7 +85,7 @@ export default function AiCoachPage() {
       <FeedbackModal
         isOpen={isFeedbackOpen}
         onClose={() => setIsFeedbackOpen(false)}
-        onSubmit={async () => {}}
+        onSubmit={handleFeedbackSubmit}
       />
 
       <AuthModal

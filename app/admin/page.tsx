@@ -30,8 +30,10 @@ import {
 } from '@/lib/feedbackService';
 import {
   getQuarantinedPapers,
+  getApprovedPastPapers,
   approveQuarantinedPaper,
   rejectQuarantinedPaper,
+  deleteApprovedPaper,
   banUserUploader,
   isUserBanned
 } from '@/lib/papersService';
@@ -63,8 +65,9 @@ export default function AdminPage() {
   const [isPublishingRelease, setIsPublishingRelease] = useState(false);
   const [releaseSuccessNote, setReleaseSuccessNote] = useState<string | null>(null);
 
-  // Quarantined Papers State
+  // Quarantined & Published Papers State
   const [quarantinedPapers, setQuarantinedPapers] = useState<PastPaperItem[]>([]);
+  const [publishedPapers, setPublishedPapers] = useState<PastPaperItem[]>([]);
   const [previewPdfPaper, setPreviewPdfPaper] = useState<PastPaperItem | null>(null);
 
   const currentUserEmail = (storeState.user?.email || '').toLowerCase().trim();
@@ -92,6 +95,8 @@ export default function AdminPage() {
       setTickets(fb);
       const qp = await getQuarantinedPapers();
       setQuarantinedPapers(qp);
+      const pub = await getApprovedPastPapers();
+      setPublishedPapers(pub);
     } catch (err: any) {
       setQueryError(err?.message || 'Failed to load records from Firestore.');
     } finally {
@@ -137,6 +142,20 @@ export default function AdminPage() {
   const handleRejectPaper = async (paperId: string) => {
     await rejectQuarantinedPaper(paperId);
     loadAdminData();
+  };
+
+  const handleDeleteQuarantinedPaper = async (paperId: string) => {
+    if (confirm('Permanently delete this quarantined paper?')) {
+      await rejectQuarantinedPaper(paperId);
+      loadAdminData();
+    }
+  };
+
+  const handleDeletePublishedPaper = async (paperId: string) => {
+    if (confirm('Delete this published paper from the library and cloud database?')) {
+      await deleteApprovedPaper(paperId);
+      loadAdminData();
+    }
   };
 
   const handleBanUploader = (email?: string) => {
@@ -551,6 +570,14 @@ export default function AdminPage() {
                             >
                               Reject
                             </button>
+                            <button
+                              onClick={() => handleDeleteQuarantinedPaper(p.id)}
+                              className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-xs flex items-center gap-1 font-semibold transition-all"
+                              title="Direct Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete Paper</span>
+                            </button>
                             {p.uploaderEmail && (
                               <button
                                 onClick={() => handleBanUploader(p.uploaderEmail)}
@@ -560,6 +587,61 @@ export default function AdminPage() {
                                 Ban
                               </button>
                             )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Published Library Papers Section with Direct Delete */}
+                  <div className="bg-[#141416] p-4 rounded-2xl border border-white/10 mt-8">
+                    <h2 className="text-sm font-bold text-white">Published Library Papers ({publishedPapers.length})</h2>
+                    <p className="text-xs text-zinc-400">Live past papers currently published and accessible in the student library.</p>
+                  </div>
+
+                  {publishedPapers.length === 0 ? (
+                    <div className="border border-dashed border-white/10 rounded-3xl p-8 text-center text-xs text-zinc-500">
+                      No published papers in the library yet.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {publishedPapers.map((p) => (
+                        <div
+                          key={p.id}
+                          className="bg-[#141416] border border-white/10 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-white">{p.title}</span>
+                              <span className="px-2 py-0.5 rounded-full bg-[#A3E635]/15 text-[#A3E635] text-[10px] font-semibold">
+                                {p.subject} • {p.year}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md bg-white/5 text-zinc-400 text-[10px]">
+                                {p.examType}
+                              </span>
+                            </div>
+                            <p className="text-xs text-zinc-500">
+                              Uploaded: {new Date(p.uploadedAt).toLocaleDateString()} • {p.uploaderName || 'Student'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {p.downloadUrl && p.downloadUrl !== '#' && (
+                              <button
+                                onClick={() => setPreviewPdfPaper(p)}
+                                className="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-zinc-300"
+                              >
+                                Preview PDF
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleDeletePublishedPaper(p.id)}
+                              className="px-3 py-1.5 rounded-xl bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 text-xs flex items-center gap-1 font-semibold transition-all"
+                              title="Delete from Library & Cloud"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete Paper</span>
+                            </button>
                           </div>
                         </div>
                       ))}

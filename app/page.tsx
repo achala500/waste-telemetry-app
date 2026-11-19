@@ -8,7 +8,7 @@ import { KpiBentoCards } from '@/components/KpiBentoCards';
 import { Timeline24Hour } from '@/components/Timeline24Hour';
 import { WeeklyOverviewSplit } from '@/components/WeeklyOverviewSplit';
 import { HeatmapView } from '@/components/HeatmapView';
-import { AiInsightsView } from '@/components/AiInsightsView';
+import { LeaderboardView } from '@/components/LeaderboardView';
 import { LogLedgerView } from '@/components/LogLedgerView';
 import { QuickLogModal } from '@/components/QuickLogModal';
 import { FeedbackModal } from '@/components/FeedbackModal';
@@ -170,15 +170,9 @@ export default function ChronoApp() {
             </div>
           )}
 
-          {activeView === 'insights' && (
+          {activeView === 'leaderboard' && (
             <div className="space-y-6">
-              <AiInsightsView
-                insights={state.insights}
-                blocks={state.blocks}
-                onRefreshInsights={async () => {
-                  await telemetryStore.refreshInsights();
-                }}
-              />
+              <LeaderboardView />
             </div>
           )}
         </main>

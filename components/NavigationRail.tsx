@@ -7,16 +7,17 @@ import {
   LayoutDashboard,
   Clock,
   BarChart3,
-  Sparkles,
+  Trophy,
   FileText,
   Shield,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from 'lucide-react';
 import { useTelemetryStore } from '@/lib/telemetryStore';
 import { FeedbackModal } from './FeedbackModal';
 import { submitFeedbackTicket } from '@/lib/feedbackService';
 
-export type NavViewId = 'dashboard' | 'timeline' | 'analytics' | 'insights' | 'papers' | 'changelog' | 'admin';
+export type NavViewId = 'dashboard' | 'timeline' | 'analytics' | 'leaderboard' | 'papers' | 'changelog' | 'admin';
 
 export interface NavigationRailProps {
   activeView?: NavViewId;
@@ -32,6 +33,8 @@ const OWNER_EMAILS = [
 ];
 
 export const NavigationRail: React.FC<NavigationRailProps> = ({
+  activeView,
+  onSelectView,
   todayDistractionCount = 0
 }) => {
   const storeState = useTelemetryStore();
@@ -72,10 +75,10 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
       href: '/analytics'
     },
     {
-      id: 'insights' as NavViewId,
-      label: 'AI Coach',
-      icon: Sparkles,
-      href: '/ai-coach'
+      id: 'leaderboard' as NavViewId,
+      label: 'Leaderboard',
+      icon: Trophy,
+      href: '/leaderboard'
     },
     {
       id: 'papers' as NavViewId,
@@ -124,7 +127,9 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive =
-                item.href === '/'
+                activeView !== undefined && pathname === '/'
+                  ? activeView === item.id
+                  : item.href === '/'
                   ? pathname === '/'
                   : pathname.startsWith(item.href);
 
@@ -132,6 +137,12 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
                 <Link
                   key={item.id}
                   href={item.href}
+                  onClick={(e) => {
+                    if (onSelectView && pathname === '/' && (item.id === 'dashboard' || item.id === 'timeline' || item.id === 'analytics' || item.id === 'leaderboard')) {
+                      e.preventDefault();
+                      onSelectView(item.id);
+                    }
+                  }}
                   className={`w-full flex items-center justify-between px-3.5 py-3 rounded-2xl text-sm font-medium transition-all duration-150 active:scale-[0.98] ${
                     isActive
                       ? 'bg-white/10 text-white shadow-sm border border-white/10'
@@ -163,6 +174,20 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
             <MessageSquare className="w-4 h-4 text-[#A3E635] group-hover:scale-110 transition-transform" />
             <span>Share Feedback</span>
           </button>
+
+          {/* Pro Membership / Pricing Link */}
+          <Link
+            href="/pricing"
+            className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-zinc-400 hover:text-white hover:bg-white/5 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:scale-110 transition-transform" />
+              <span>Membership</span>
+            </div>
+            <span className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-full font-bold border border-amber-500/20">
+              Pro / Master
+            </span>
+          </Link>
 
           {/* Changelog Link */}
           <Link
@@ -208,7 +233,9 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive =
-            item.href === '/'
+            activeView !== undefined && pathname === '/'
+              ? activeView === item.id
+              : item.href === '/'
               ? pathname === '/'
               : pathname.startsWith(item.href);
 
@@ -216,6 +243,12 @@ export const NavigationRail: React.FC<NavigationRailProps> = ({
             <Link
               key={item.id}
               href={item.href}
+              onClick={(e) => {
+                if (onSelectView && pathname === '/' && (item.id === 'dashboard' || item.id === 'timeline' || item.id === 'analytics' || item.id === 'leaderboard')) {
+                  e.preventDefault();
+                  onSelectView(item.id);
+                }
+              }}
               className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] transition-all ${
                 isActive ? 'text-[#A3E635] font-semibold' : 'text-zinc-400 hover:text-zinc-200'
               }`}
